@@ -1,0 +1,11 @@
+[package]
+name = "hoot-app"
+version = "0.1.0"
+authors = ["Jack Chakany <jack@chakany.systems>"]
+edition = "2021"
+publish = false
+
+[dependencies]
+eframe = { version = "0.27.2", features = ["default"] }
+egui_extras = { version = "0.27.2", features = ["all_loaders"] }
+image = { version = "0.25.1", features = ["jpeg", "png"] }
