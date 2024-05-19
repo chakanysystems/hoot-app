@@ -1,14 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // for windows release
 
-use std::time::SystemTime;
-
 use eframe::egui::{self, FontDefinitions, Sense, Vec2b};
 use egui::FontFamily::Proportional;
 use egui::TextStyle::*;
 use egui::{Align, FontId, Layout};
 use egui_extras::{Column, TableBuilder};
 use std::thread;
-use tokio::runtime;
 use tracing::{debug, error, info, Level};
 
 fn main() -> Result<(), eframe::Error> {
