@@ -20,4 +20,3 @@ tracing-subscriber = "0.3.18"
 yandk = { path = "../yandk", features = ["coordinator"] }
 puffin = "0.19.0"
 puffin_http = "0.16.0"
-tokio = { version = "1.37.0", features = ["full"] }
