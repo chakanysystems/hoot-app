@@ -7,8 +7,7 @@ use egui::{Align, FontId, Layout};
 use egui_extras::{Column, TableBuilder};
 use tracing::{debug, error, info, Level};
 
-#[tokio::main]
-async fn main() -> Result<(), eframe::Error> {
+fn main() -> Result<(), eframe::Error> {
     let (non_blocking, _guard) = tracing_appender::non_blocking(std::io::stdout()); // add log files in prod one day
     tracing_subscriber::fmt()
         .with_writer(non_blocking)
