@@ -5,9 +5,6 @@ use egui::FontFamily::Proportional;
 use egui::TextStyle::*;
 use egui::{Align, FontId, Layout};
 use egui_extras::{Column, TableBuilder};
-use std::sync::Arc;
-use std::thread;
-use tokio::sync::RwLock;
 use tracing::{debug, error, info, Level};
 
 #[tokio::main]
@@ -24,8 +21,6 @@ async fn main() -> Result<(), eframe::Error> {
         viewport: egui::ViewportBuilder::default().with_inner_size([1024.0, 600.0]),
         ..Default::default()
     };
-
-    let mut coordinator = yandk::coordinator::Coordinator::new();
 
     eframe::run_native(
         "Hoot",
