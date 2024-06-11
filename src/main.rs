@@ -5,39 +5,18 @@ use egui::FontFamily::Proportional;
 use egui::TextStyle::*;
 use egui::{Align, FontId, Layout};
 use egui_extras::{Column, TableBuilder};
+use std::sync::Arc;
 use std::thread;
+use tokio::sync::RwLock;
 use tracing::{debug, error, info, Level};
 
-fn main() -> Result<(), eframe::Error> {
+#[tokio::main]
+async fn main() -> Result<(), eframe::Error> {
     let (non_blocking, _guard) = tracing_appender::non_blocking(std::io::stdout()); // add log files in prod one day
     tracing_subscriber::fmt()
         .with_writer(non_blocking)
         .with_max_level(Level::DEBUG)
         .init();
-    thread::spawn(move || {
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(async {
-                tokio::task::spawn(async {
-                    let mut relay =
-                        yandk::relay::Relay::new("wss://relay.damus.io".to_string()).unwrap();
-                    match relay.connect().await {
-                        Ok(g) => g,
-                        Err(e) => error!("error, {:?}", e),
-                    }
-                    let mut relay2 = yandk::relay::Relay::new("wss://nos.lol".to_string()).unwrap();
-                    match relay2.connect().await {
-                        Ok(g) => g,
-                        Err(e) => error!("error, {:?}", e),
-                    }
-                });
-                loop {
-                    std::thread::yield_now();
-                }
-            });
-    });
 
     start_puffin_server();
 
@@ -45,6 +24,8 @@ fn main() -> Result<(), eframe::Error> {
         viewport: egui::ViewportBuilder::default().with_inner_size([1024.0, 600.0]),
         ..Default::default()
     };
+
+    let mut coordinator = yandk::coordinator::Coordinator::new();
 
     eframe::run_native(
         "Hoot",
@@ -84,6 +65,7 @@ struct Hoot {
     current_page: Page,
     focused_post: String,
     status: HootStatus,
+    nostr: yandk::coordinator::Coordinator,
 }
 
 #[derive(Debug, PartialEq)]
@@ -94,7 +76,16 @@ enum HootStatus {
 
 impl Default for Hoot {
     fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Hoot {
+    fn new() -> Self {
+        let coordinator = yandk::coordinator::Coordinator::new();
+
         Self {
+            nostr: coordinator,
             current_page: Page::Inbox,
             focused_post: "".into(),
             status: HootStatus::Initalizing,
@@ -108,8 +99,13 @@ impl eframe::App for Hoot {
             HootStatus::Initalizing => {
                 info!("Initalizing Hoot...");
                 self.status = HootStatus::Ready;
+                let cloned_ctx = ctx.clone();
+                let refresh_func = move || {
+                    cloned_ctx.request_repaint();
+                };
+                let _ = self.nostr.add_relay("".to_string(), refresh_func);
             }
-            HootStatus::Ready => {}
+            HootStatus::Ready => self.nostr.try_recv(), // we want to recieve events now
         }
 
         egui::SidePanel::left("sidebar").show(ctx, |ui| {
@@ -125,8 +121,40 @@ impl eframe::App for Hoot {
                 ui.selectable_value(&mut self.current_page, Page::Trash, "Trash");
 
                 ui.with_layout(Layout::bottom_up(Align::LEFT), |ui| {
-                    ui.label("jack@chakany.systems");
-                    ui.label("Jack Chakany");
+                    let my_key = yandk::Pubkey::from_hex(
+                        "c5fb6ecc876e0458e3eca9918e370cbcd376901c58460512fe537a46e58c38bb",
+                    )
+                    .unwrap();
+                    let maybe_profile = match self.nostr.get_profile(my_key.bytes()) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            error!("error when getting profile: {}", e);
+                            ui.label("Loading...");
+                            ui.label("Loading...");
+                            None
+                        }
+                    };
+                    if let Some(p) = maybe_profile {
+                        let record = p.record();
+                        if let Some(profile) = record.profile() {
+                            if let Some(nip_05) = profile.nip05() {
+                                ui.label(nip_05);
+                            } else {
+                                ui.label("No Nostr Address");
+                            }
+                            if let Some(display_name) = profile.display_name() {
+                                ui.label(display_name);
+                            } else if let Some(name) = profile.name() {
+                                ui.label(format!("@{}", name));
+                            } else {
+                                let hex = my_key.hex();
+                                ui.label(hex);
+                            }
+                        }
+                    } else {
+                        ui.label("Loading...");
+                        ui.label("Loading...");
+                    }
                     ui.separator();
                 });
             });

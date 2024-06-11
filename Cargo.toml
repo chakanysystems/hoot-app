@@ -7,7 +7,12 @@ publish = false
 
 [dependencies]
 eframe = { version = "0.27.2", features = ["default", "puffin"] }
-egui_extras = { version = "0.27.2", features = ["all_loaders", "puffin"] }
+egui_extras = { version = "0.27.2", features = [
+    "file",
+    "image",
+    "svg",
+    "puffin",
+] }
 image = { version = "0.25.1", features = ["jpeg", "png"] }
 tracing = "0.1.40"
 tracing-appender = "0.2.3"
