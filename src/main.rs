@@ -59,7 +59,6 @@ struct Hoot {
     current_page: Page,
     focused_post: String,
     status: HootStatus,
-    nostr: yandk::coordinator::Coordinator,
 }
 
 #[derive(Debug, PartialEq)]
@@ -76,10 +75,7 @@ impl Default for Hoot {
 
 impl Hoot {
     fn new() -> Self {
-        let coordinator = yandk::coordinator::Coordinator::new();
-
         Self {
-            nostr: coordinator,
             current_page: Page::Inbox,
             focused_post: "".into(),
             status: HootStatus::Initalizing,
@@ -93,13 +89,8 @@ impl eframe::App for Hoot {
             HootStatus::Initalizing => {
                 info!("Initalizing Hoot...");
                 self.status = HootStatus::Ready;
-                let cloned_ctx = ctx.clone();
-                let refresh_func = move || {
-                    cloned_ctx.request_repaint();
-                };
-                let _ = self.nostr.add_relay("".to_string(), refresh_func);
             }
-            HootStatus::Ready => self.nostr.try_recv(), // we want to recieve events now
+            HootStatus::Ready => {}, 
         }
 
         egui::SidePanel::left("sidebar").show(ctx, |ui| {
@@ -115,40 +106,8 @@ impl eframe::App for Hoot {
                 ui.selectable_value(&mut self.current_page, Page::Trash, "Trash");
 
                 ui.with_layout(Layout::bottom_up(Align::LEFT), |ui| {
-                    let my_key = yandk::Pubkey::from_hex(
-                        "c5fb6ecc876e0458e3eca9918e370cbcd376901c58460512fe537a46e58c38bb",
-                    )
-                    .unwrap();
-                    let maybe_profile = match self.nostr.get_profile(my_key.bytes()) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            error!("error when getting profile: {}", e);
-                            ui.label("Loading...");
-                            ui.label("Loading...");
-                            None
-                        }
-                    };
-                    if let Some(p) = maybe_profile {
-                        let record = p.record();
-                        if let Some(profile) = record.profile() {
-                            if let Some(nip_05) = profile.nip05() {
-                                ui.label(nip_05);
-                            } else {
-                                ui.label("No Nostr Address");
-                            }
-                            if let Some(display_name) = profile.display_name() {
-                                ui.label(display_name);
-                            } else if let Some(name) = profile.name() {
-                                ui.label(format!("@{}", name));
-                            } else {
-                                let hex = my_key.hex();
-                                ui.label(hex);
-                            }
-                        }
-                    } else {
-                        ui.label("Loading...");
-                        ui.label("Loading...");
-                    }
+                    ui.label("Loading...");
+                    ui.label("Loading...");
                     ui.separator();
                 });
             });
