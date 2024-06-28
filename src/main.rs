@@ -7,6 +7,9 @@ use egui::{Align, FontId, Layout};
 use egui_extras::{Column, TableBuilder};
 use tracing::{debug, error, info, Level};
 
+mod relay;
+mod pool;
+
 fn main() -> Result<(), eframe::Error> {
     let (non_blocking, _guard) = tracing_appender::non_blocking(std::io::stdout()); // add log files in prod one day
     tracing_subscriber::fmt()
@@ -14,6 +17,7 @@ fn main() -> Result<(), eframe::Error> {
         .with_max_level(Level::DEBUG)
         .init();
 
+    #[cfg(feature = "profiling")]
     start_puffin_server();
 
     let options = eframe::NativeOptions {
@@ -40,7 +44,7 @@ fn main() -> Result<(), eframe::Error> {
             let _ = &cc
                 .egui_ctx
                 .style_mut(|style| style.visuals.dark_mode = false);
-            Box::<Hoot>::default()
+            Box::new(Hoot::new(cc))
         }),
     )
 }
@@ -59,6 +63,7 @@ struct Hoot {
     current_page: Page,
     focused_post: String,
     status: HootStatus,
+    relays: pool::RelayPool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -67,18 +72,45 @@ enum HootStatus {
     Ready,
 }
 
-impl Default for Hoot {
-    fn default() -> Self {
-        Self::new()
+fn update_app(app: &mut Hoot, ctx: &egui::Context) {
+    #[cfg(feature = "profiling")]
+    puffin::profile_function!();
+
+    if app.status == HootStatus::Initalizing {
+        let ctx = ctx.clone();
+        let wake_up = move || {
+            ctx.request_repaint();
+        };
+        app.relays.add_url("wss://relay.damus.io".to_string(), wake_up);
+        app.status = HootStatus::Ready;
     }
+
+    app.relays.try_recv();
+}
+
+fn render_app(ctx: &egui::Context) {
+    #[cfg(feature = "profiling")]
+    puffin::profile_function!();
+
+    egui::SidePanel::left("Side Navbar").show(ctx, |ui| {
+        ui.heading("Hoot");
+    });
+    egui::TopBottomPanel::top("Search").show(ctx, |ui| {
+        ui.heading("Search");
+    });
+
+    egui::CentralPanel::default().show(ctx, |ui| {
+        ui.label("hello there!");
+    });
 }
 
 impl Hoot {
-    fn new() -> Self {
+    fn new(cc: &eframe::CreationContext<'_>) -> Self {
         Self {
             current_page: Page::Inbox,
             focused_post: "".into(),
             status: HootStatus::Initalizing,
+            relays: pool::RelayPool::new(),
         }
     }
 }
@@ -93,110 +125,12 @@ impl eframe::App for Hoot {
             HootStatus::Ready => {}, 
         }
 
-        egui::SidePanel::left("sidebar").show(ctx, |ui| {
-            ui.heading("Hoot");
-            ui.vertical(|ui| {
-                ui.style_mut()
-                    .text_styles
-                    .insert(Button, FontId::new(20.0, Proportional));
-                ui.selectable_value(&mut self.current_page, Page::Inbox, "Inbox");
-                ui.selectable_value(&mut self.current_page, Page::Drafts, "Drafts");
-                ui.selectable_value(&mut self.current_page, Page::Starred, "Starred");
-                ui.selectable_value(&mut self.current_page, Page::Archived, "Archived");
-                ui.selectable_value(&mut self.current_page, Page::Trash, "Trash");
-
-                ui.with_layout(Layout::bottom_up(Align::LEFT), |ui| {
-                    ui.label("Loading...");
-                    ui.label("Loading...");
-                    ui.separator();
-                });
-            });
-        });
-        egui::TopBottomPanel::top("search").show(ctx, |ui| {
-            ui.heading("Search");
-        });
-        egui::CentralPanel::default().show(ctx, |ui| match self.current_page {
-            Page::Inbox => {
-                ui.horizontal(|ui| {
-                    ui.checkbox(&mut false, "");
-                    ui.heading("Inbox");
-                });
-                TableBuilder::new(ui)
-                    .column(Column::auto())
-                    .column(Column::auto())
-                    .column(Column::remainder())
-                    .column(Column::remainder())
-                    .column(Column::remainder())
-                    .striped(true)
-                    .auto_shrink(Vec2b { x: false, y: false })
-                    .sense(Sense::click())
-                    .header(20.0, |_header| {})
-                    .body(|mut body| {
-                        puffin::profile_scope!("table rendering");
-                        body.row(30.0, |mut row| {
-                            row.col(|ui| {
-                                ui.checkbox(&mut false, "");
-                            });
-                            row.col(|ui| {
-                                ui.checkbox(&mut false, "");
-                            });
-                            row.col(|ui| {
-                                ui.label("Jack Chakany");
-                            });
-                            row.col(|ui| {
-                                ui.label("Hello! Just checking in...");
-                            });
-                            row.col(|ui| {
-                                ui.label("5 min ago");
-                            });
-
-                            if row.response().clicked() {
-                                self.current_page = Page::Post;
-                            }
-                        });
-                        body.row(30.0, |mut row| {
-                            row.col(|ui| {
-                                ui.checkbox(&mut false, "");
-                            });
-                            row.col(|ui| {
-                                ui.checkbox(&mut false, "");
-                            });
-                            row.col(|ui| {
-                                ui.label("Karnage");
-                            });
-                            row.col(|ui| {
-                                ui.label("New designs!");
-                            });
-                            row.col(|ui| {
-                                ui.label("10 min ago");
-                            });
-
-                            if row.response().clicked() {
-                                self.current_page = Page::Post;
-                            }
-                        });
-                    });
-            }
-            Page::Drafts => {
-                ui.heading("Drafts");
-            }
-            Page::Starred => {
-                ui.heading("Starred");
-            }
-            Page::Archived => {
-                ui.heading("Archived");
-            }
-            Page::Trash => {
-                ui.heading("Trash");
-            }
-            Page::Post => {
-                // used for viewing messages duh
-                ui.heading("Message");
-                ui.label(format!("{}", self.focused_post));
-            }
-        });
+        update_app(self, ctx);
+        render_app(ctx);
     }
 }
+
+#[cfg(feature = "profiling")]
 fn start_puffin_server() {
     puffin::set_scopes_on(true); // tell puffin to collect data
 

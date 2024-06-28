@@ -5,17 +5,20 @@ authors = ["Jack Chakany <jack@chakany.systems>"]
 edition = "2021"
 publish = false
 
+[features]
+profiling = ["dep:puffin", "dep:puffin_http", "eframe/puffin", "egui_extras/puffin"]
+
 [dependencies]
-eframe = { version = "0.27.2", features = ["default", "puffin"] }
+eframe = { version = "0.27.2", features = ["default", "persistence"] }
 egui_extras = { version = "0.27.2", features = [
     "file",
     "image",
     "svg",
-    "puffin",
 ] }
 image = { version = "0.25.1", features = ["jpeg", "png"] }
 tracing = "0.1.40"
 tracing-appender = "0.2.3"
 tracing-subscriber = "0.3.18"
-puffin = "0.19.0"
-puffin_http = "0.16.0"
+puffin = { version = "0.19.0", optional = true }
+puffin_http = { version = "0.16.0", optional = true }
+ewebsock = { version = "0.6.0", features = ["tls"] }
