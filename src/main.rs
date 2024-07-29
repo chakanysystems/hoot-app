@@ -10,6 +10,8 @@ use tracing::{debug, error, info, Level};
 mod relay;
 mod pool;
 
+mod ui;
+
 fn main() -> Result<(), eframe::Error> {
     let (non_blocking, _guard) = tracing_appender::non_blocking(std::io::stdout()); // add log files in prod one day
     tracing_subscriber::fmt()
@@ -53,17 +55,16 @@ fn main() -> Result<(), eframe::Error> {
 enum Page {
     Inbox,
     Drafts,
-    Starred,
-    Archived,
-    Trash,
-    Post,
+    Settings,
 }
 
-struct Hoot {
+pub struct Hoot {
     current_page: Page,
     focused_post: String,
     status: HootStatus,
     relays: pool::RelayPool,
+    ndb: nostrdb::Ndb,
+    pub windows: Vec<Box<ui::compose_window::ComposeWindow>>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -83,34 +84,96 @@ fn update_app(app: &mut Hoot, ctx: &egui::Context) {
         };
         app.relays.add_url("wss://relay.damus.io".to_string(), wake_up);
         app.status = HootStatus::Ready;
+        info!("Hoot Ready");
     }
 
     app.relays.try_recv();
 }
 
-fn render_app(ctx: &egui::Context) {
+fn render_app(app: &mut Hoot, ctx: &egui::Context) {
     #[cfg(feature = "profiling")]
     puffin::profile_function!();
 
     egui::SidePanel::left("Side Navbar").show(ctx, |ui| {
         ui.heading("Hoot");
+        if ui.button("Inbox").clicked() {
+            app.current_page = Page::Inbox;
+        }
+        if ui.button("Drafts").clicked() {
+            app.current_page = Page::Drafts;
+        }
+        if ui.button("Settings").clicked() {
+            app.current_page = Page::Settings;
+        }
     });
+
     egui::TopBottomPanel::top("Search").show(ctx, |ui| {
         ui.heading("Search");
     });
 
     egui::CentralPanel::default().show(ctx, |ui| {
-        ui.label("hello there!");
+        // todo: fix
+        for window in &mut app.windows {
+            window.show(ui);
+        }
+
+        if app.current_page == Page::Inbox {
+            ui.label("hello there!");
+            if ui.button("Compose").clicked() {
+                let mut new_window = Box::new(ui::compose_window::ComposeWindow::new());
+                new_window.show(ui);
+                app.windows.push(new_window);
+            }
+
+            TableBuilder::new(ui)
+                .column(Column::auto())
+                .column(Column::auto())
+                .column(Column::remainder())
+                .column(Column::remainder())
+                .column(Column::remainder())
+                .striped(true)
+                .sense(Sense::click())
+                .auto_shrink(Vec2b { x: false, y: false})
+                .header(20.0, |_header| {})
+                .body(|mut body| {
+                    body.row(30.0, |mut row| {
+                        row.col(|ui| {
+                            ui.checkbox(&mut false, "");
+                        });
+                        row.col(|ui| {
+                            ui.checkbox(&mut false, "");
+                        });
+                        row.col(|ui| {
+                            ui.label("Jack Chakany");
+                        });
+                        row.col(|ui| {
+                            ui.label("Message Content");
+                        });
+                        row.col(|ui| {
+                            ui.label("5 minutes ago");
+                        });
+                    });
+                });
+        } else if app.current_page == Page::Settings {
+            ui.label("Settings");
+        }
     });
 }
 
 impl Hoot {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        let storage_dir = eframe::storage_dir("Hoot").unwrap();
+        let mut ndb_config = nostrdb::Config::new();
+        ndb_config.set_ingester_threads(3);
+
+        let ndb = nostrdb::Ndb::new(storage_dir.to_str().unwrap(), &ndb_config).expect("could not load nostrdb");
         Self {
             current_page: Page::Inbox,
             focused_post: "".into(),
             status: HootStatus::Initalizing,
             relays: pool::RelayPool::new(),
+            ndb,
+            windows: Vec::new(),
         }
     }
 }
@@ -126,7 +189,7 @@ impl eframe::App for Hoot {
         }
 
         update_app(self, ctx);
-        render_app(ctx);
+        render_app(self, ctx);
     }
 }
 

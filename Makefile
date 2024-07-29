@@ -1,2 +1,2 @@
 dev:
-	cargo run --features profiling
+	RUST_BACKTRACE=1 cargo run --features profiling
