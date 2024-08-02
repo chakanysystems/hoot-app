@@ -8,8 +8,7 @@ use egui_extras::{Column, TableBuilder};
 use tracing::{debug, error, info, Level};
 
 mod relay;
-mod pool;
-
+mod error;
 mod ui;
 
 fn main() -> Result<(), eframe::Error> {
@@ -62,7 +61,7 @@ pub struct Hoot {
     current_page: Page,
     focused_post: String,
     status: HootStatus,
-    relays: pool::RelayPool,
+    relays: relay::RelayPool,
     ndb: nostrdb::Ndb,
     pub windows: Vec<Box<ui::compose_window::ComposeWindow>>,
 }
@@ -78,16 +77,21 @@ fn update_app(app: &mut Hoot, ctx: &egui::Context) {
     puffin::profile_function!();
 
     if app.status == HootStatus::Initalizing {
+        info!("Initalizing Hoot...");
         let ctx = ctx.clone();
         let wake_up = move || {
             ctx.request_repaint();
         };
-        app.relays.add_url("wss://relay.damus.io".to_string(), wake_up);
+        app.relays.add_url("wss://relay.damus.io".to_string(), wake_up.clone());
+        app.relays.add_url("wss://relay-dev.hoot.sh".to_string(), wake_up);
         app.status = HootStatus::Ready;
         info!("Hoot Ready");
     }
 
-    app.relays.try_recv();
+    let new_val = app.relays.try_recv();
+    if new_val.is_some() {
+        info!("{:?}", new_val);
+    }
 }
 
 fn render_app(app: &mut Hoot, ctx: &egui::Context) {
@@ -117,12 +121,21 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
             window.show(ui);
         }
 
+
         if app.current_page == Page::Inbox {
             ui.label("hello there!");
             if ui.button("Compose").clicked() {
                 let mut new_window = Box::new(ui::compose_window::ComposeWindow::new());
                 new_window.show(ui);
                 app.windows.push(new_window);
+            }
+
+            if ui.button("Send Test Event").clicked() {
+                let temp_keys = nostr::Keys::generate();
+                // todo: lmao
+                let new_event = nostr::EventBuilder::text_note("GFY!", []).to_event(&temp_keys).unwrap();
+                let event_json = crate::relay::ClientMessage::Event { event: new_event };
+                let _ = &app.relays.send(ewebsock::WsMessage::Text(serde_json::to_string(&event_json).unwrap())).unwrap();
             }
 
             TableBuilder::new(ui)
@@ -144,6 +157,24 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                             ui.checkbox(&mut false, "");
                         });
                         row.col(|ui| {
+                            ui.label("Elon Musk");
+                        });
+                        row.col(|ui| {
+                            ui.label("Second Test Message");
+                        });
+                        row.col(|ui| {
+                            ui.label("2 minutes ago");
+                        });
+                    });
+
+                    body.row(30.0, |mut row| {
+                        row.col(|ui| {
+                            ui.checkbox(&mut false, "");
+                        });
+                        row.col(|ui| {
+                            ui.checkbox(&mut false, "");
+                        });
+                        row.col(|ui| {
                             ui.label("Jack Chakany");
                         });
                         row.col(|ui| {
@@ -156,6 +187,7 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                 });
         } else if app.current_page == Page::Settings {
             ui.label("Settings");
+            ui.label(format!("Connected Relays: {}", &app.relays.get_number_of_relays()));
         }
     });
 }
@@ -171,7 +203,7 @@ impl Hoot {
             current_page: Page::Inbox,
             focused_post: "".into(),
             status: HootStatus::Initalizing,
-            relays: pool::RelayPool::new(),
+            relays: relay::RelayPool::new(),
             ndb,
             windows: Vec::new(),
         }
@@ -180,14 +212,6 @@ impl Hoot {
 
 impl eframe::App for Hoot {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        match self.status {
-            HootStatus::Initalizing => {
-                info!("Initalizing Hoot...");
-                self.status = HootStatus::Ready;
-            }
-            HootStatus::Ready => {}, 
-        }
-
         update_app(self, ctx);
         render_app(self, ctx);
     }

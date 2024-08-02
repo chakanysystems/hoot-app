@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use crate::relay::{Relay, RelayStatus};
+use crate::error::Result;
 
 pub struct RelayPool {
     relays: HashMap<String, Relay>
@@ -18,7 +19,7 @@ impl RelayPool {
         self.relays.insert(url, relay);
     }
 
-    pub fn try_recv(&mut self) -> Option<ewebsock::WsMessage> {
+    pub fn try_recv(&mut self) -> Option<String> {
         for relay in &mut self.relays {
             if let Some(message) = relay.1.try_recv() {
                 return Some(message);
@@ -26,5 +27,19 @@ impl RelayPool {
         }
 
         return None;
+    }
+
+    pub fn send(&mut self, message: ewebsock::WsMessage) -> Result<()> {
+        for relay in &mut self.relays {
+            if relay.1.status == RelayStatus::Connected {
+                relay.1.send(message.clone())?;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn get_number_of_relays(&mut self) -> usize {
+        self.relays.len()
     }
 }

@@ -24,4 +24,6 @@ puffin_http = { version = "0.16.0", optional = true }
 ewebsock = { version = "0.6.0", features = ["tls"] }
 nostrdb = { git = "https://github.com/damus-io/nostrdb-rs", rev = "ee8afeeb0b6695fca6d27dd0b74a8dc159e37b95" }
 rand = "0.8.5"
-nostr = "0.32.1"
+nostr = { version = "0.32.1", features = ["std"] }
+serde = "1.0.204"
+serde_json = "1.0.121"
