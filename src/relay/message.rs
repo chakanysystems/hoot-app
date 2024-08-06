@@ -30,9 +30,12 @@ pub enum RelayMessage {
     },
 }
 
-impl From<WsMessage> for RelayMessage {
-    fn from(value: WsMessage) -> Self {
-        match value {
+impl TryFrom<WsMessage> for RelayMessage {
+    type Error = ();
+
+    fn try_from(x
+        : WsMessage) -> Result<Self, Self::Error> {
+        match x{
             WsMessage::Text(text) => {
                 let parsed: RelayMessage = match serde_json::from_str(&text) {
                     Ok(p) => p,
@@ -40,10 +43,10 @@ impl From<WsMessage> for RelayMessage {
                         panic!("could not parse message: {}", e);
                     }
                 };
-                return parsed;
+                Ok(parsed)
             }
             _ => {
-                panic!("Cannot parse anything but text into a RelayMessage");
+                Err(())
             }
         }
     }
