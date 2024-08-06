@@ -67,11 +67,11 @@ impl<'de> Deserialize<'de> for RelayMessage {
             where
                 A: SeqAccess<'de>,
             {
-                let tag: String = seq
+                let tag: &str = seq
                     .next_element()?
                     .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
 
-                match tag.as_str() {
+                match tag {
                     "EVENT" => {
                         let subscription_id: String = seq
                             .next_element()?
