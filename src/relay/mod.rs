@@ -50,45 +50,44 @@ impl Relay {
 
     pub fn try_recv(&mut self) -> Option<String> {
         if let Some(event) = self.reader.try_recv() {
+            use WsEvent::*;
             match event {
-                WsEvent::Message(message) => {
+                Message(message) => {
                     return self.handle_message(message);
                 },
-                WsEvent::Opened => {
+                Opened => {
                     self.status = RelayStatus::Connected;
                 },
-                WsEvent::Error(error) => {
+                Error(error) => {
                     error!("error in websocket connection to {}: {}", self.url, error);
                 },
-                WsEvent::Closed => {
+                Closed => {
                     info!("connection to {} closed", self.url);
                     self.status = RelayStatus::Disconnected;
                 }
             }
         }
 
-        return None;
+        None
     }
 
     fn handle_message(&mut self, message: WsMessage) -> Option<String> {
+        use WsMessage::*;
         match message {
-            WsMessage::Text(txt) => {
+            Text(txt) => {
                 return Some(txt);
             },
-            WsMessage::Binary(..) => {
+            Binary(..) => {
                 error!("recived binary messsage, your move semisol");
             },
-            WsMessage::Ping(d) => {
+            Ping(d) => {
                 let pong_msg = WsMessage::Pong(d);
                 match self.send(pong_msg) {
                     Ok(_) => {},
                     Err(e) => error!("error when sending websocket message {:?}", e)
                 }
             },
-            WsMessage::Pong(..) => {
-                // ??
-            },
-            WsMessage::Unknown(..) => {
+            _ => {
                 // who cares
             },
         }
