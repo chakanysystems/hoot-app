@@ -7,8 +7,8 @@ use egui::{Align, FontId, Layout};
 use egui_extras::{Column, TableBuilder};
 use tracing::{debug, error, info, Level};
 
-mod relay;
 mod error;
+mod relay;
 mod ui;
 
 fn main() -> Result<(), eframe::Error> {
@@ -51,18 +51,29 @@ fn main() -> Result<(), eframe::Error> {
 }
 
 #[derive(Debug, PartialEq)]
-enum Page {
+pub enum Page {
     Inbox,
     Drafts,
     Settings,
+    Onboarding,
+    OnboardingNew,
+    OnboardingReturning,
+}
+
+// for storing the state of different components and such.
+#[derive(Default)]
+pub struct HootState {
+    pub onboarding: ui::onboarding::OnboardingState,
 }
 
 pub struct Hoot {
-    current_page: Page,
+    pub current_page: Page,
     focused_post: String,
     status: HootStatus,
+    state: HootState,
     relays: relay::RelayPool,
     ndb: nostrdb::Ndb,
+    events: Vec<nostr::Event>,
     pub windows: Vec<Box<ui::compose_window::ComposeWindow>>,
 }
 
@@ -82,15 +93,30 @@ fn update_app(app: &mut Hoot, ctx: &egui::Context) {
         let wake_up = move || {
             ctx.request_repaint();
         };
-        app.relays.add_url("wss://relay.damus.io".to_string(), wake_up.clone());
-        app.relays.add_url("wss://relay-dev.hoot.sh".to_string(), wake_up);
+        app.relays
+            .add_url("wss://relay.damus.io".to_string(), wake_up.clone());
+        app.relays
+            .add_url("wss://relay-dev.hoot.sh".to_string(), wake_up);
         app.status = HootStatus::Ready;
         info!("Hoot Ready");
     }
 
     let new_val = app.relays.try_recv();
     if new_val.is_some() {
-        info!("{:?}", new_val);
+        info!("{:?}", new_val.clone());
+
+        use relay::RelayMessage;
+        let deserialized: RelayMessage = serde_json::from_str(new_val.unwrap().as_str()).expect("relay sent us bad json");
+
+        use RelayMessage::*;
+        match deserialized {
+            Event{ subscription_id, event } => {
+                app.events.push(event);
+            },
+            _ => {
+                // who cares rn
+            }
+        }
     }
 }
 
@@ -98,98 +124,143 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
     #[cfg(feature = "profiling")]
     puffin::profile_function!();
 
-    egui::SidePanel::left("Side Navbar").show(ctx, |ui| {
-        ui.heading("Hoot");
-        if ui.button("Inbox").clicked() {
-            app.current_page = Page::Inbox;
-        }
-        if ui.button("Drafts").clicked() {
-            app.current_page = Page::Drafts;
-        }
-        if ui.button("Settings").clicked() {
-            app.current_page = Page::Settings;
-        }
-    });
+    if app.current_page == Page::Onboarding || app.current_page == Page::OnboardingNew || app.current_page == Page::OnboardingReturning {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui::onboarding::OnboardingScreen::ui(app, ui);
+        });
+    } else {
+        egui::SidePanel::left("Side Navbar").show(ctx, |ui| {
+            ui.heading("Hoot");
+            if ui.button("Inbox").clicked() {
+                app.current_page = Page::Inbox;
+            }
+            if ui.button("Drafts").clicked() {
+                app.current_page = Page::Drafts;
+            }
+            if ui.button("Settings").clicked() {
+                app.current_page = Page::Settings;
+            }
+        });
 
-    egui::TopBottomPanel::top("Search").show(ctx, |ui| {
-        ui.heading("Search");
-    });
+        egui::TopBottomPanel::top("Search").show(ctx, |ui| {
+            ui.heading("Search");
+        });
 
-    egui::CentralPanel::default().show(ctx, |ui| {
-        // todo: fix
-        for window in &mut app.windows {
-            window.show(ui);
-        }
-
-
-        if app.current_page == Page::Inbox {
-            ui.label("hello there!");
-            if ui.button("Compose").clicked() {
-                let mut new_window = Box::new(ui::compose_window::ComposeWindow::new());
-                new_window.show(ui);
-                app.windows.push(new_window);
+        egui::CentralPanel::default().show(ctx, |ui| {
+            // todo: fix
+            for window in &mut app.windows {
+                window.show(ui);
             }
 
-            if ui.button("Send Test Event").clicked() {
-                let temp_keys = nostr::Keys::generate();
-                // todo: lmao
-                let new_event = nostr::EventBuilder::text_note("GFY!", []).to_event(&temp_keys).unwrap();
-                let event_json = crate::relay::ClientMessage::Event { event: new_event };
-                let _ = &app.relays.send(ewebsock::WsMessage::Text(serde_json::to_string(&event_json).unwrap())).unwrap();
+            if app.current_page == Page::Inbox {
+                ui.label("hello there!");
+                if ui.button("Compose").clicked() {
+                    let mut new_window = Box::new(ui::compose_window::ComposeWindow::new());
+                    new_window.show(ui);
+                    app.windows.push(new_window);
+                }
+
+                if ui.button("Send Test Event").clicked() {
+                    let temp_keys = nostr::Keys::generate();
+                    // todo: lmao
+                    let new_event = nostr::EventBuilder::text_note("GFY!", [])
+                        .to_event(&temp_keys)
+                        .unwrap();
+                    let event_json = crate::relay::ClientMessage::Event { event: new_event };
+                    let _ = &app
+                        .relays
+                        .send(ewebsock::WsMessage::Text(
+                            serde_json::to_string(&event_json).unwrap(),
+                        ))
+                        .unwrap();
+                }
+
+                if ui.button("Get kind 1 notes").clicked() {
+                    let mut filter = nostr::types::Filter::new();
+                    filter = filter.kind(nostr::Kind::TextNote);
+                    let mut sub = crate::relay::Subscription::default();
+                    sub.filter(filter);
+                    let c_msg = crate::relay::ClientMessage::from(sub);
+
+                    let _ = &app.relays.send(ewebsock::WsMessage::Text(serde_json::to_string(&c_msg).unwrap())).unwrap();
+                }
+
+                TableBuilder::new(ui)
+                    .column(Column::auto())
+                    .column(Column::auto())
+                    .column(Column::remainder())
+                    .column(Column::remainder())
+                    .column(Column::remainder())
+                    .striped(true)
+                    .sense(Sense::click())
+                    .auto_shrink(Vec2b { x: false, y: false })
+                    .header(20.0, |_header| {})
+                    .body(|mut body| {
+                        for event in app.events.clone() {
+                        body.row(30.0, |mut row| {
+                            row.col(|ui| {
+                                ui.checkbox(&mut false, "");
+                            });
+                            row.col(|ui| {
+                                ui.checkbox(&mut false, "");
+                            });
+                            row.col(|ui| {
+                                ui.label(event.pubkey.to_string());
+                            });
+                            row.col(|ui| {
+                                ui.label(event.content.clone());
+                            });
+                            row.col(|ui| {
+                                ui.label("2 minutes ago");
+                            });
+                        });
+
+                        }
+                        body.row(30.0, |mut row| {
+                            row.col(|ui| {
+                                ui.checkbox(&mut false, "");
+                            });
+                            row.col(|ui| {
+                                ui.checkbox(&mut false, "");
+                            });
+                            row.col(|ui| {
+                                ui.label("Elon Musk");
+                            });
+                            row.col(|ui| {
+                                ui.label("Second Test Message");
+                            });
+                            row.col(|ui| {
+                                ui.label("2 minutes ago");
+                            });
+                        });
+
+                        body.row(30.0, |mut row| {
+                            row.col(|ui| {
+                                ui.checkbox(&mut false, "");
+                            });
+                            row.col(|ui| {
+                                ui.checkbox(&mut false, "");
+                            });
+                            row.col(|ui| {
+                                ui.label("Jack Chakany");
+                            });
+                            row.col(|ui| {
+                                ui.label("Message Content");
+                            });
+                            row.col(|ui| {
+                                ui.label("5 minutes ago");
+                            });
+                        });
+                    });
+            } else if app.current_page == Page::Settings {
+                ui.label("Settings");
+                ui.label(format!(
+                    "Connected Relays: {}",
+                    &app.relays.get_number_of_relays()
+                ));
             }
-
-            TableBuilder::new(ui)
-                .column(Column::auto())
-                .column(Column::auto())
-                .column(Column::remainder())
-                .column(Column::remainder())
-                .column(Column::remainder())
-                .striped(true)
-                .sense(Sense::click())
-                .auto_shrink(Vec2b { x: false, y: false})
-                .header(20.0, |_header| {})
-                .body(|mut body| {
-                    body.row(30.0, |mut row| {
-                        row.col(|ui| {
-                            ui.checkbox(&mut false, "");
-                        });
-                        row.col(|ui| {
-                            ui.checkbox(&mut false, "");
-                        });
-                        row.col(|ui| {
-                            ui.label("Elon Musk");
-                        });
-                        row.col(|ui| {
-                            ui.label("Second Test Message");
-                        });
-                        row.col(|ui| {
-                            ui.label("2 minutes ago");
-                        });
-                    });
-
-                    body.row(30.0, |mut row| {
-                        row.col(|ui| {
-                            ui.checkbox(&mut false, "");
-                        });
-                        row.col(|ui| {
-                            ui.checkbox(&mut false, "");
-                        });
-                        row.col(|ui| {
-                            ui.label("Jack Chakany");
-                        });
-                        row.col(|ui| {
-                            ui.label("Message Content");
-                        });
-                        row.col(|ui| {
-                            ui.label("5 minutes ago");
-                        });
-                    });
-                });
-        } else if app.current_page == Page::Settings {
-            ui.label("Settings");
-            ui.label(format!("Connected Relays: {}", &app.relays.get_number_of_relays()));
-        }
-    });
+        });
+    }
 }
 
 impl Hoot {
@@ -198,13 +269,16 @@ impl Hoot {
         let mut ndb_config = nostrdb::Config::new();
         ndb_config.set_ingester_threads(3);
 
-        let ndb = nostrdb::Ndb::new(storage_dir.to_str().unwrap(), &ndb_config).expect("could not load nostrdb");
+        let ndb = nostrdb::Ndb::new(storage_dir.to_str().unwrap(), &ndb_config)
+            .expect("could not load nostrdb");
         Self {
             current_page: Page::Inbox,
             focused_post: "".into(),
             status: HootStatus::Initalizing,
+            state: Default::default(),
             relays: relay::RelayPool::new(),
             ndb,
+            events: Vec::new(),
             windows: Vec::new(),
         }
     }
