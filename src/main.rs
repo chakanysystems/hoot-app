@@ -106,13 +106,17 @@ fn update_app(app: &mut Hoot, ctx: &egui::Context) {
         info!("{:?}", new_val.clone());
 
         use relay::RelayMessage;
-        let deserialized: RelayMessage = serde_json::from_str(new_val.unwrap().as_str()).expect("relay sent us bad json");
+        let deserialized: RelayMessage =
+            serde_json::from_str(new_val.unwrap().as_str()).expect("relay sent us bad json");
 
         use RelayMessage::*;
         match deserialized {
-            Event{ subscription_id, event } => {
+            Event {
+                subscription_id,
+                event,
+            } => {
                 app.events.push(event);
-            },
+            }
             _ => {
                 // who cares rn
             }
@@ -124,7 +128,10 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
     #[cfg(feature = "profiling")]
     puffin::profile_function!();
 
-    if app.current_page == Page::Onboarding || app.current_page == Page::OnboardingNew || app.current_page == Page::OnboardingReturning {
+    if app.current_page == Page::Onboarding
+        || app.current_page == Page::OnboardingNew
+        || app.current_page == Page::OnboardingReturning
+    {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui::onboarding::OnboardingScreen::ui(app, ui);
         });
@@ -182,7 +189,12 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                     sub.filter(filter);
                     let c_msg = crate::relay::ClientMessage::from(sub);
 
-                    let _ = &app.relays.send(ewebsock::WsMessage::Text(serde_json::to_string(&c_msg).unwrap())).unwrap();
+                    let _ = &app
+                        .relays
+                        .send(ewebsock::WsMessage::Text(
+                            serde_json::to_string(&c_msg).unwrap(),
+                        ))
+                        .unwrap();
                 }
 
                 TableBuilder::new(ui)
@@ -197,24 +209,23 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                     .header(20.0, |_header| {})
                     .body(|mut body| {
                         for event in app.events.clone() {
-                        body.row(30.0, |mut row| {
-                            row.col(|ui| {
-                                ui.checkbox(&mut false, "");
+                            body.row(30.0, |mut row| {
+                                row.col(|ui| {
+                                    ui.checkbox(&mut false, "");
+                                });
+                                row.col(|ui| {
+                                    ui.checkbox(&mut false, "");
+                                });
+                                row.col(|ui| {
+                                    ui.label(event.pubkey.to_string());
+                                });
+                                row.col(|ui| {
+                                    ui.label(event.content.clone());
+                                });
+                                row.col(|ui| {
+                                    ui.label("2 minutes ago");
+                                });
                             });
-                            row.col(|ui| {
-                                ui.checkbox(&mut false, "");
-                            });
-                            row.col(|ui| {
-                                ui.label(event.pubkey.to_string());
-                            });
-                            row.col(|ui| {
-                                ui.label(event.content.clone());
-                            });
-                            row.col(|ui| {
-                                ui.label("2 minutes ago");
-                            });
-                        });
-
                         }
                         body.row(30.0, |mut row| {
                             row.col(|ui| {

@@ -1,6 +1,6 @@
-use nostr::Event;
-use nostr::types::Filter;
 use ewebsock::WsMessage;
+use nostr::types::Filter;
+use nostr::Event;
 use serde::de::{SeqAccess, Visitor};
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};

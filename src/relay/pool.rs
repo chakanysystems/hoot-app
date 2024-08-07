@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-use crate::relay::{Relay, RelayStatus};
 use crate::error::Result;
+use crate::relay::{Relay, RelayStatus};
+use std::collections::HashMap;
 
 pub struct RelayPool {
-    relays: HashMap<String, Relay>
+    relays: HashMap<String, Relay>,
 }
 
 impl RelayPool {

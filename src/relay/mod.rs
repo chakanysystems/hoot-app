@@ -27,9 +27,14 @@ pub struct Relay {
 }
 
 impl Relay {
-    pub fn new_with_wakeup(url: impl Into<String>, wake_up: impl Fn() + Send + Sync + 'static) -> Self {
+    pub fn new_with_wakeup(
+        url: impl Into<String>,
+        wake_up: impl Fn() + Send + Sync + 'static,
+    ) -> Self {
         let new_url: String = url.into();
-        let (sender, reciever) = ewebsock::connect_with_wakeup(new_url.clone(), ewebsock::Options::default(), wake_up).unwrap();
+        let (sender, reciever) =
+            ewebsock::connect_with_wakeup(new_url.clone(), ewebsock::Options::default(), wake_up)
+                .unwrap();
 
         Self {
             url: new_url,
@@ -54,13 +59,13 @@ impl Relay {
             match event {
                 Message(message) => {
                     return self.handle_message(message);
-                },
+                }
                 Opened => {
                     self.status = RelayStatus::Connected;
-                },
+                }
                 Error(error) => {
                     error!("error in websocket connection to {}: {}", self.url, error);
-                },
+                }
                 Closed => {
                     info!("connection to {} closed", self.url);
                     self.status = RelayStatus::Disconnected;
@@ -76,20 +81,20 @@ impl Relay {
         match message {
             Text(txt) => {
                 return Some(txt);
-            },
+            }
             Binary(..) => {
                 error!("recived binary messsage, your move semisol");
-            },
+            }
             Ping(d) => {
                 let pong_msg = WsMessage::Pong(d);
                 match self.send(pong_msg) {
-                    Ok(_) => {},
-                    Err(e) => error!("error when sending websocket message {:?}", e)
+                    Ok(_) => {}
+                    Err(e) => error!("error when sending websocket message {:?}", e),
                 }
-            },
+            }
             _ => {
                 // who cares
-            },
+            }
         }
 
         None

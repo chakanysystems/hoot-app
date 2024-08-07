@@ -1,11 +1,11 @@
-use eframe::egui;
 use crate::{Hoot, Page};
+use eframe::egui;
 use tracing::error;
 
 #[derive(Default)]
 pub struct OnboardingState {
     // for nsecs, etc.
-    pub secret_input: String
+    pub secret_input: String,
 }
 
 pub struct OnboardingScreen {}

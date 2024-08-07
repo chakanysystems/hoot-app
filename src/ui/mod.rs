@@ -6,4 +6,3 @@ pub mod onboarding;
 pub trait View {
     fn ui(&mut self, ui: &mut egui::Ui);
 }
-

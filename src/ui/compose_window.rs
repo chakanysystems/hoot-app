@@ -29,7 +29,10 @@ impl ComposeWindow {
                 ui.vertical(|ui| {
                     ui.text_edit_singleline(&mut self.to_field);
                     ui.text_edit_singleline(&mut self.subject);
-                    ui.add_sized(ui.available_size(), egui::TextEdit::multiline(&mut self.content));
+                    ui.add_sized(
+                        ui.available_size(),
+                        egui::TextEdit::multiline(&mut self.content),
+                    );
                 });
             });
     }
