@@ -17,6 +17,7 @@ impl OnboardingScreen {
         match app.current_page {
             Page::Onboarding => Self::onboarding_home(app, ui),
             Page::OnboardingNew => Self::onboarding_new(app, ui),
+            Page::OnboardingNewShowKey => Self::onboarding_new_keypair_generated(app, ui),
             Page::OnboardingReturning => Self::onboarding_returning(app, ui),
             _ => error!("OnboardingScreen should not be displayed when page is not Onboarding!"),
         }
@@ -37,6 +38,26 @@ impl OnboardingScreen {
             app.current_page = Page::Onboarding;
         }
         ui.label("To setup Hoot Mail, you need a nostr identity.");
+
+        if ui.button("Create new keypair").clicked() {
+            let _ = app.account_manager.generate_keys();
+            app.current_page = Page::OnboardingNewShowKey;
+        }
+    }
+
+
+    fn onboarding_new_keypair_generated(app: &mut Hoot, ui: &mut egui::Ui) {
+        use nostr::ToBech32;
+        use crate::keystorage::KeyStorage;
+
+        let first_key = app.account_manager.loaded_keys[0].clone();
+        ui.label(format!("New identity: {}", first_key.public_key().to_bech32().unwrap()));
+
+        if ui.button("OK, Save!").clicked() {
+            app.account_manager.add_key(&first_key).expect("could not write key");
+
+            app.current_page = Page::Inbox;
+        }
     }
 
     fn onboarding_returning(app: &mut Hoot, ui: &mut egui::Ui) {

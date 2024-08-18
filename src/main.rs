@@ -10,6 +10,8 @@ use tracing::{debug, error, info, Level};
 mod error;
 mod relay;
 mod ui;
+mod keystorage;
+mod account_manager;
 
 fn main() -> Result<(), eframe::Error> {
     let (non_blocking, _guard) = tracing_appender::non_blocking(std::io::stdout()); // add log files in prod one day
@@ -55,8 +57,10 @@ pub enum Page {
     Inbox,
     Drafts,
     Settings,
+    // TODO: fix this mess
     Onboarding,
     OnboardingNew,
+    OnboardingNewShowKey,
     OnboardingReturning,
 }
 
@@ -75,6 +79,7 @@ pub struct Hoot {
     ndb: nostrdb::Ndb,
     events: Vec<nostr::Event>,
     pub windows: Vec<Box<ui::compose_window::ComposeWindow>>,
+    account_manager: account_manager::AccountManager,
 }
 
 #[derive(Debug, PartialEq)]
@@ -130,6 +135,7 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
 
     if app.current_page == Page::Onboarding
         || app.current_page == Page::OnboardingNew
+        || app.current_page == Page::OnboardingNewShowKey
         || app.current_page == Page::OnboardingReturning
     {
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -269,6 +275,17 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                     "Connected Relays: {}",
                     &app.relays.get_number_of_relays()
                 ));
+
+                if ui.button("fetch keys").clicked() {
+                    let _ = app.account_manager.load_keys();
+                }
+
+                ui.vertical(|ui| {
+                    use nostr::ToBech32;
+                    for key in app.account_manager.loaded_keys.clone() {
+                        ui.label(format!("Key ID: {}", key.public_key().to_bech32().unwrap()));
+                    }
+                });
             }
         });
     }
@@ -291,6 +308,7 @@ impl Hoot {
             ndb,
             events: Vec::new(),
             windows: Vec::new(),
+            account_manager: account_manager::AccountManager::new(),
         }
     }
 }
