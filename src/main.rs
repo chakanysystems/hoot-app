@@ -153,6 +153,9 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
             if ui.button("Settings").clicked() {
                 app.page = Page::Settings;
             }
+            if ui.button("Onboarding").clicked() {
+                app.page = Page::Onboarding;
+            }
         });
 
         egui::TopBottomPanel::top("Search").show(ctx, |ui| {
