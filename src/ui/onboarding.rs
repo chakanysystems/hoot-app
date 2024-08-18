@@ -45,16 +45,20 @@ impl OnboardingScreen {
         }
     }
 
-
     fn onboarding_new_keypair_generated(app: &mut Hoot, ui: &mut egui::Ui) {
-        use nostr::ToBech32;
         use crate::keystorage::KeyStorage;
+        use nostr::ToBech32;
 
         let first_key = app.account_manager.loaded_keys[0].clone();
-        ui.label(format!("New identity: {}", first_key.public_key().to_bech32().unwrap()));
+        ui.label(format!(
+            "New identity: {}",
+            first_key.public_key().to_bech32().unwrap()
+        ));
 
         if ui.button("OK, Save!").clicked() {
-            app.account_manager.add_key(&first_key).expect("could not write key");
+            app.account_manager
+                .add_key(&first_key)
+                .expect("could not write key");
 
             app.current_page = Page::Inbox;
         }

@@ -1,5 +1,5 @@
-use super::{KeyStorage, Error};
-use nostr::{Keys};
+use super::{Error, KeyStorage};
+use nostr::Keys;
 
 pub struct LinuxKeyStorage {}
 
@@ -30,7 +30,9 @@ struct BasicFileStorage {
 
 impl BasicFileStorage {
     pub fn new() -> Self {
-        BasicFileStorage { credentials_dir: ".credentials".to_string() }
+        BasicFileStorage {
+            credentials_dir: ".credentials".to_string(),
+        }
     }
 
     fn write_private_key(&self, keypair: &Keys) -> Result<(), Error> {
@@ -55,7 +57,7 @@ impl BasicFileStorage {
         Ok(())
     }
 
-    fn read_private_keys(&self) -> Result<Vec<Keys>, Error>{
+    fn read_private_keys(&self) -> Result<Vec<Keys>, Error> {
         use std::fs::{self, File};
         use std::io::Read;
         use std::path::Path;
@@ -114,4 +116,3 @@ impl KeyStorage for BasicFileStorage {
         Ok(())
     }
 }
-

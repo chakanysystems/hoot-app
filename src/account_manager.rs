@@ -1,4 +1,4 @@
-use crate::keystorage::{KeyStorage, KeyStorageType, Error};
+use crate::keystorage::{Error, KeyStorage, KeyStorageType};
 use nostr::Keys;
 
 pub struct AccountManager {
@@ -52,4 +52,3 @@ impl KeyStorage for AccountManager {
         Self::get_platform_keystorage().remove_key(key)
     }
 }
-

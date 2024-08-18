@@ -7,11 +7,11 @@ use egui::{Align, FontId, Layout};
 use egui_extras::{Column, TableBuilder};
 use tracing::{debug, error, info, Level};
 
+mod account_manager;
 mod error;
+mod keystorage;
 mod relay;
 mod ui;
-mod keystorage;
-mod account_manager;
 
 fn main() -> Result<(), eframe::Error> {
     let (non_blocking, _guard) = tracing_appender::non_blocking(std::io::stdout()); // add log files in prod one day

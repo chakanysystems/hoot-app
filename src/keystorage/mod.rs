@@ -4,7 +4,7 @@ mod linux;
 use linux::LinuxKeyStorage;
 
 pub enum Error {
-    IOError(std::io::Error)
+    IOError(std::io::Error),
 }
 
 impl From<std::io::Error> for Error {
@@ -38,7 +38,7 @@ impl KeyStorage for KeyStorageType {
         match self {
             Self::None => Ok(()),
             #[cfg(target_os = "linux")]
-            Self::Linux => LinuxKeyStorage::new().add_key(key)
+            Self::Linux => LinuxKeyStorage::new().add_key(key),
         }
     }
 
