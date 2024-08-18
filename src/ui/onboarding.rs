@@ -14,7 +14,7 @@ impl OnboardingScreen {
     pub fn ui(app: &mut Hoot, ui: &mut egui::Ui) {
         ui.heading("Welcome to Hoot Mail!");
 
-        match app.current_page {
+        match app.page {
             Page::Onboarding => Self::onboarding_home(app, ui),
             Page::OnboardingNew => Self::onboarding_new(app, ui),
             Page::OnboardingNewShowKey => Self::onboarding_new_keypair_generated(app, ui),
@@ -25,23 +25,23 @@ impl OnboardingScreen {
 
     fn onboarding_home(app: &mut Hoot, ui: &mut egui::Ui) {
         if ui.button("I am new to Hoot Mail").clicked() {
-            app.current_page = Page::OnboardingNew;
+            app.page = Page::OnboardingNew;
         }
 
         if ui.button("I have used Hoot Mail before.").clicked() {
-            app.current_page = Page::OnboardingReturning;
+            app.page = Page::OnboardingReturning;
         }
     }
 
     fn onboarding_new(app: &mut Hoot, ui: &mut egui::Ui) {
         if ui.button("Go Back").clicked() {
-            app.current_page = Page::Onboarding;
+            app.page = Page::Onboarding;
         }
         ui.label("To setup Hoot Mail, you need a nostr identity.");
 
         if ui.button("Create new keypair").clicked() {
             let _ = app.account_manager.generate_keys();
-            app.current_page = Page::OnboardingNewShowKey;
+            app.page = Page::OnboardingNewShowKey;
         }
     }
 
@@ -60,13 +60,13 @@ impl OnboardingScreen {
                 .add_key(&first_key)
                 .expect("could not write key");
 
-            app.current_page = Page::Inbox;
+            app.page = Page::Inbox;
         }
     }
 
     fn onboarding_returning(app: &mut Hoot, ui: &mut egui::Ui) {
         if ui.button("Go Back").clicked() {
-            app.current_page = Page::Onboarding;
+            app.page = Page::Onboarding;
         }
         ui.label("Welcome Back!");
         ui.text_edit_singleline(&mut app.state.onboarding.secret_input);

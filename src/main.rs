@@ -71,7 +71,7 @@ pub struct HootState {
 }
 
 pub struct Hoot {
-    pub current_page: Page,
+    pub page: Page,
     focused_post: String,
     status: HootStatus,
     state: HootState,
@@ -133,10 +133,10 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
     #[cfg(feature = "profiling")]
     puffin::profile_function!();
 
-    if app.current_page == Page::Onboarding
-        || app.current_page == Page::OnboardingNew
-        || app.current_page == Page::OnboardingNewShowKey
-        || app.current_page == Page::OnboardingReturning
+    if app.page == Page::Onboarding
+        || app.page == Page::OnboardingNew
+        || app.page == Page::OnboardingNewShowKey
+        || app.page == Page::OnboardingReturning
     {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui::onboarding::OnboardingScreen::ui(app, ui);
@@ -145,13 +145,13 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
         egui::SidePanel::left("Side Navbar").show(ctx, |ui| {
             ui.heading("Hoot");
             if ui.button("Inbox").clicked() {
-                app.current_page = Page::Inbox;
+                app.page = Page::Inbox;
             }
             if ui.button("Drafts").clicked() {
-                app.current_page = Page::Drafts;
+                app.page = Page::Drafts;
             }
             if ui.button("Settings").clicked() {
-                app.current_page = Page::Settings;
+                app.page = Page::Settings;
             }
         });
 
@@ -165,7 +165,7 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                 window.show(ui);
             }
 
-            if app.current_page == Page::Inbox {
+            if app.page == Page::Inbox {
                 ui.label("hello there!");
                 if ui.button("Compose").clicked() {
                     let mut new_window = Box::new(ui::compose_window::ComposeWindow::new());
@@ -269,7 +269,7 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                             });
                         });
                     });
-            } else if app.current_page == Page::Settings {
+            } else if app.page == Page::Settings {
                 ui.label("Settings");
                 ui.label(format!(
                     "Connected Relays: {}",
@@ -300,7 +300,7 @@ impl Hoot {
         let ndb = nostrdb::Ndb::new(storage_dir.to_str().unwrap(), &ndb_config)
             .expect("could not load nostrdb");
         Self {
-            current_page: Page::Inbox,
+            page: Page::Inbox,
             focused_post: "".into(),
             status: HootStatus::Initalizing,
             state: Default::default(),
