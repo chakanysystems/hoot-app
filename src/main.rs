@@ -289,7 +289,10 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                         ui.horizontal(|ui| {
                             ui.label(format!("Key ID: {}", key.public_key().to_bech32().unwrap()));
                             if ui.button("Remove Key").clicked() {
-                                let _ = app.account_manager.delete_key(&key);
+                                match app.account_manager.delete_key(&key) {
+                                    Ok(..) => {},
+                                    Err(v) => error!("couldn't remove key: {}", v),
+                                }
                             }
                         });
                     }
