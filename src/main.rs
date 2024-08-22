@@ -98,6 +98,10 @@ fn update_app(app: &mut Hoot, ctx: &egui::Context) {
         let wake_up = move || {
             ctx.request_repaint();
         };
+        match app.account_manager.load_keys() {
+            Ok(..) => {},
+            Err(v) => error!("something went wrong trying to load keys: {}", v),
+        }
         app.relays
             .add_url("wss://relay.damus.io".to_string(), wake_up.clone());
         app.relays
@@ -273,15 +277,11 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                         });
                     });
             } else if app.page == Page::Settings {
-                ui.label("Settings");
+                ui.heading("Settings");
                 ui.label(format!(
                     "Connected Relays: {}",
                     &app.relays.get_number_of_relays()
                 ));
-
-                if ui.button("fetch keys").clicked() {
-                    let _ = app.account_manager.load_keys();
-                }
 
                 ui.vertical(|ui| {
                     use nostr::ToBech32;
