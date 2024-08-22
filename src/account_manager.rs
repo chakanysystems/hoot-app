@@ -28,6 +28,15 @@ impl AccountManager {
         Ok(keys)
     }
 
+    pub fn delete_key(&mut self, key: &Keys) -> Result<(), Error> {
+        self.remove_key(key)?;
+        if let Some(index) = self.loaded_keys.iter().position(|k| k == key) {
+            self.loaded_keys.remove(index);
+        }
+
+        Ok(())
+    }
+
     fn get_platform_keystorage() -> KeyStorageType {
         #[cfg(target_os = "linux")]
         {

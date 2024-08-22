@@ -286,7 +286,12 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                 ui.vertical(|ui| {
                     use nostr::ToBech32;
                     for key in app.account_manager.loaded_keys.clone() {
-                        ui.label(format!("Key ID: {}", key.public_key().to_bech32().unwrap()));
+                        ui.horizontal(|ui| {
+                            ui.label(format!("Key ID: {}", key.public_key().to_bech32().unwrap()));
+                            if ui.button("Remove Key").clicked() {
+                                let _ = app.account_manager.delete_key(&key);
+                            }
+                        });
                     }
                 });
             }
