@@ -3,7 +3,7 @@ use crate::relay::{Relay, RelayStatus};
 use std::collections::HashMap;
 
 pub struct RelayPool {
-    relays: HashMap<String, Relay>,
+    pub relays: HashMap<String, Relay>,
 }
 
 impl RelayPool {
@@ -15,31 +15,35 @@ impl RelayPool {
 
     pub fn add_url(&mut self, url: String, wake_up: impl Fn() + Send + Sync + 'static) {
         let relay = Relay::new_with_wakeup(url.clone(), wake_up);
-
         self.relays.insert(url, relay);
     }
 
+    pub fn remove_url(&mut self, url: &str) -> Option<Relay> {
+        self.relays.remove(url)
+    }
+
     pub fn try_recv(&mut self) -> Option<String> {
-        for relay in &mut self.relays {
-            if let Some(message) = relay.1.try_recv() {
+        for relay in self.relays.values_mut() {
+            if let Some(message) = relay.try_recv() {
                 return Some(message);
             }
         }
-
-        return None;
+        None
     }
 
     pub fn send(&mut self, message: ewebsock::WsMessage) -> Result<()> {
-        for relay in &mut self.relays {
-            if relay.1.status == RelayStatus::Connected {
-                relay.1.send(message.clone())?;
+        for relay in self.relays.values_mut() {
+            if relay.status == RelayStatus::Connected {
+                relay.send(message.clone())?;
             }
         }
-
         Ok(())
     }
 
-    pub fn get_number_of_relays(&mut self) -> usize {
-        self.relays.len()
+    pub fn ping_all(&mut self) -> Result<()> {
+        for relay in self.relays.values_mut() {
+            relay.ping();
+        }
+        Ok(())
     }
 }

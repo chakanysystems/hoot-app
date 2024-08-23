@@ -19,7 +19,7 @@ impl OnboardingScreen {
             Page::OnboardingNew => Self::onboarding_new(app, ui),
             Page::OnboardingNewShowKey => Self::onboarding_new_keypair_generated(app, ui),
             Page::OnboardingReturning => Self::onboarding_returning(app, ui),
-_ => error!("OnboardingScreen should not be displayed when page is not Onboarding!"),
+            _ => error!("OnboardingScreen should not be displayed when page is not Onboarding!"),
         }
     }
 
@@ -70,7 +70,6 @@ _ => error!("OnboardingScreen should not be displayed when page is not Onboardin
         }
         ui.label("Welcome Back!");
 
-
         let parsed_secret_key = nostr::SecretKey::parse(&app.state.onboarding.secret_input);
         let valid_key = parsed_secret_key.is_ok();
         ui.horizontal(|ui| {
@@ -82,7 +81,10 @@ _ => error!("OnboardingScreen should not be displayed when page is not Onboardin
             }
         });
 
-        if ui.add_enabled(valid_key, egui::Button::new("Save")).clicked() {
+        if ui
+            .add_enabled(valid_key, egui::Button::new("Save"))
+            .clicked()
+        {
             use crate::keystorage::KeyStorage;
             let keypair = nostr::Keys::new(parsed_secret_key.unwrap());
             let _ = app.account_manager.add_key(&keypair);

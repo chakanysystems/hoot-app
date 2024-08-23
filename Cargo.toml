@@ -15,6 +15,7 @@ egui_extras = { version = "0.27.2", features = [
     "image",
     "svg",
 ] }
+egui_tabs = { git = "https://github.com/damus-io/egui-tabs", rev = "120971fc43db6ba0b6f194f4bd4a66f7e00a4e22" }
 image = { version = "0.25.1", features = ["jpeg", "png"] }
 tracing = "0.1.40"
 tracing-appender = "0.2.3"

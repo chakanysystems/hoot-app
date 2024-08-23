@@ -68,6 +68,7 @@ pub enum Page {
 #[derive(Default)]
 pub struct HootState {
     pub onboarding: ui::onboarding::OnboardingState,
+    pub settings: ui::settings::SettingsState,
 }
 
 pub struct Hoot {
@@ -99,7 +100,7 @@ fn update_app(app: &mut Hoot, ctx: &egui::Context) {
             ctx.request_repaint();
         };
         match app.account_manager.load_keys() {
-            Ok(..) => {},
+            Ok(..) => {}
             Err(v) => error!("something went wrong trying to load keys: {}", v),
         }
         app.relays
@@ -278,25 +279,7 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                     });
             } else if app.page == Page::Settings {
                 ui.heading("Settings");
-                ui.label(format!(
-                    "Connected Relays: {}",
-                    &app.relays.get_number_of_relays()
-                ));
-
-                ui.vertical(|ui| {
-                    use nostr::ToBech32;
-                    for key in app.account_manager.loaded_keys.clone() {
-                        ui.horizontal(|ui| {
-                            ui.label(format!("Key ID: {}", key.public_key().to_bech32().unwrap()));
-                            if ui.button("Remove Key").clicked() {
-                                match app.account_manager.delete_key(&key) {
-                                    Ok(..) => {},
-                                    Err(v) => error!("couldn't remove key: {}", v),
-                                }
-                            }
-                        });
-                    }
-                });
+                ui::settings::SettingsScreen::ui(app, ui);
             }
         });
     }

@@ -12,7 +12,7 @@ pub use message::{ClientMessage, RelayMessage};
 mod subscription;
 pub use subscription::Subscription;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum RelayStatus {
     Connecting,
     Connected,
@@ -20,10 +20,10 @@ pub enum RelayStatus {
 }
 
 pub struct Relay {
-    url: String,
+    pub url: String,
     reader: ewebsock::WsReceiver,
     writer: ewebsock::WsSender,
-    status: RelayStatus,
+    pub status: RelayStatus,
 }
 
 impl Relay {
@@ -36,12 +36,16 @@ impl Relay {
             ewebsock::connect_with_wakeup(new_url.clone(), ewebsock::Options::default(), wake_up)
                 .unwrap();
 
-        Self {
+        let mut relay = Self {
             url: new_url,
             reader: reciever,
             writer: sender,
-            status: RelayStatus::Connected,
-        }
+            status: RelayStatus::Connecting,
+        };
+
+        relay.ping();
+
+        relay
     }
 
     pub fn send(&mut self, message: WsMessage) -> Result<()> {
@@ -98,5 +102,19 @@ impl Relay {
         }
 
         None
+    }
+
+    pub fn ping(&mut self) {
+        let ping_msg = WsMessage::Ping(Vec::new());
+        match self.send(ping_msg) {
+            Ok(_) => {
+                info!("Ping sent to {}", self.url);
+                self.status = RelayStatus::Connected;
+            }
+            Err(e) => {
+                error!("Error sending ping to {}: {:?}", self.url, e);
+                self.status = RelayStatus::Disconnected;
+            }
+        }
     }
 }
