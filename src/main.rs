@@ -7,6 +7,12 @@ use egui::{Align, FontId, Layout};
 use egui_extras::{Column, TableBuilder};
 use tracing::{debug, error, info, Level};
 
+mod account_manager;
+mod error;
+mod keystorage;
+mod relay;
+mod ui;
+
 fn main() -> Result<(), eframe::Error> {
     let (non_blocking, _guard) = tracing_appender::non_blocking(std::io::stdout()); // add log files in prod one day
     tracing_subscriber::fmt()
@@ -14,6 +20,7 @@ fn main() -> Result<(), eframe::Error> {
         .with_max_level(Level::DEBUG)
         .init();
 
+    #[cfg(feature = "profiling")]
     start_puffin_server();
 
     let options = eframe::NativeOptions {
@@ -40,26 +47,40 @@ fn main() -> Result<(), eframe::Error> {
             let _ = &cc
                 .egui_ctx
                 .style_mut(|style| style.visuals.dark_mode = false);
-            Box::<Hoot>::default()
+            Box::new(Hoot::new(cc))
         }),
     )
 }
 
 #[derive(Debug, PartialEq)]
-enum Page {
+pub enum Page {
     Inbox,
     Drafts,
-    Starred,
-    Archived,
-    Trash,
-    Post,
+    Settings,
+    // TODO: fix this mess
+    Onboarding,
+    OnboardingNew,
+    OnboardingNewShowKey,
+    OnboardingReturning,
 }
 
-struct Hoot {
-    current_page: Page,
+// for storing the state of different components and such.
+#[derive(Default)]
+pub struct HootState {
+    pub onboarding: ui::onboarding::OnboardingState,
+    pub settings: ui::settings::SettingsState,
+}
+
+pub struct Hoot {
+    pub page: Page,
     focused_post: String,
     status: HootStatus,
-    nostr: yandk::coordinator::Coordinator,
+    state: HootState,
+    relays: relay::RelayPool,
+    ndb: nostrdb::Ndb,
+    events: Vec<nostr::Event>,
+    pub windows: Vec<Box<ui::compose_window::ComposeWindow>>,
+    account_manager: account_manager::AccountManager,
 }
 
 #[derive(Debug, PartialEq)]
@@ -68,100 +89,128 @@ enum HootStatus {
     Ready,
 }
 
-impl Default for Hoot {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+fn update_app(app: &mut Hoot, ctx: &egui::Context) {
+    #[cfg(feature = "profiling")]
+    puffin::profile_function!();
 
-impl Hoot {
-    fn new() -> Self {
-        let coordinator = yandk::coordinator::Coordinator::new();
-
-        Self {
-            nostr: coordinator,
-            current_page: Page::Inbox,
-            focused_post: "".into(),
-            status: HootStatus::Initalizing,
+    if app.status == HootStatus::Initalizing {
+        info!("Initalizing Hoot...");
+        let ctx = ctx.clone();
+        let wake_up = move || {
+            ctx.request_repaint();
+        };
+        match app.account_manager.load_keys() {
+            Ok(..) => {}
+            Err(v) => error!("something went wrong trying to load keys: {}", v),
         }
+        app.relays
+            .add_url("wss://relay.damus.io".to_string(), wake_up.clone());
+        app.relays
+            .add_url("wss://relay-dev.hoot.sh".to_string(), wake_up);
+        app.status = HootStatus::Ready;
+        info!("Hoot Ready");
     }
-}
 
-impl eframe::App for Hoot {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        match self.status {
-            HootStatus::Initalizing => {
-                info!("Initalizing Hoot...");
-                self.status = HootStatus::Ready;
-                let cloned_ctx = ctx.clone();
-                let refresh_func = move || {
-                    cloned_ctx.request_repaint();
-                };
-                let _ = self.nostr.add_relay("".to_string(), refresh_func);
+    let new_val = app.relays.try_recv();
+    if new_val.is_some() {
+        info!("{:?}", new_val.clone());
+
+        use relay::RelayMessage;
+        let deserialized: RelayMessage =
+            serde_json::from_str(new_val.unwrap().as_str()).expect("relay sent us bad json");
+
+        use RelayMessage::*;
+        match deserialized {
+            Event {
+                subscription_id,
+                event,
+            } => {
+                app.events.push(event);
             }
-            HootStatus::Ready => self.nostr.try_recv(), // we want to recieve events now
+            _ => {
+                // who cares rn
+            }
         }
+    }
+}
 
-        egui::SidePanel::left("sidebar").show(ctx, |ui| {
-            ui.heading("Hoot");
-            ui.vertical(|ui| {
-                ui.style_mut()
-                    .text_styles
-                    .insert(Button, FontId::new(20.0, Proportional));
-                ui.selectable_value(&mut self.current_page, Page::Inbox, "Inbox");
-                ui.selectable_value(&mut self.current_page, Page::Drafts, "Drafts");
-                ui.selectable_value(&mut self.current_page, Page::Starred, "Starred");
-                ui.selectable_value(&mut self.current_page, Page::Archived, "Archived");
-                ui.selectable_value(&mut self.current_page, Page::Trash, "Trash");
+fn render_app(app: &mut Hoot, ctx: &egui::Context) {
+    #[cfg(feature = "profiling")]
+    puffin::profile_function!();
 
-                ui.with_layout(Layout::bottom_up(Align::LEFT), |ui| {
-                    let my_key = yandk::Pubkey::from_hex(
-                        "c5fb6ecc876e0458e3eca9918e370cbcd376901c58460512fe537a46e58c38bb",
-                    )
-                    .unwrap();
-                    let maybe_profile = match self.nostr.get_profile(my_key.bytes()) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            error!("error when getting profile: {}", e);
-                            ui.label("Loading...");
-                            ui.label("Loading...");
-                            None
-                        }
-                    };
-                    if let Some(p) = maybe_profile {
-                        let record = p.record();
-                        if let Some(profile) = record.profile() {
-                            if let Some(nip_05) = profile.nip05() {
-                                ui.label(nip_05);
-                            } else {
-                                ui.label("No Nostr Address");
-                            }
-                            if let Some(display_name) = profile.display_name() {
-                                ui.label(display_name);
-                            } else if let Some(name) = profile.name() {
-                                ui.label(format!("@{}", name));
-                            } else {
-                                let hex = my_key.hex();
-                                ui.label(hex);
-                            }
-                        }
-                    } else {
-                        ui.label("Loading...");
-                        ui.label("Loading...");
-                    }
-                    ui.separator();
-                });
-            });
+    if app.page == Page::Onboarding
+        || app.page == Page::OnboardingNew
+        || app.page == Page::OnboardingNewShowKey
+        || app.page == Page::OnboardingReturning
+    {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui::onboarding::OnboardingScreen::ui(app, ui);
         });
-        egui::TopBottomPanel::top("search").show(ctx, |ui| {
+    } else {
+        egui::SidePanel::left("Side Navbar").show(ctx, |ui| {
+            ui.heading("Hoot");
+            if ui.button("Inbox").clicked() {
+                app.page = Page::Inbox;
+            }
+            if ui.button("Drafts").clicked() {
+                app.page = Page::Drafts;
+            }
+            if ui.button("Settings").clicked() {
+                app.page = Page::Settings;
+            }
+            if ui.button("Onboarding").clicked() {
+                app.page = Page::Onboarding;
+            }
+        });
+
+        egui::TopBottomPanel::top("Search").show(ctx, |ui| {
             ui.heading("Search");
         });
-        egui::CentralPanel::default().show(ctx, |ui| match self.current_page {
-            Page::Inbox => {
-                ui.horizontal(|ui| {
-                    ui.checkbox(&mut false, "");
-                    ui.heading("Inbox");
-                });
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            // todo: fix
+            for window in &mut app.windows {
+                window.show(ui);
+            }
+
+            if app.page == Page::Inbox {
+                ui.label("hello there!");
+                if ui.button("Compose").clicked() {
+                    let mut new_window = Box::new(ui::compose_window::ComposeWindow::new());
+                    new_window.show(ui);
+                    app.windows.push(new_window);
+                }
+
+                if ui.button("Send Test Event").clicked() {
+                    let temp_keys = nostr::Keys::generate();
+                    // todo: lmao
+                    let new_event = nostr::EventBuilder::text_note("GFY!", [])
+                        .to_event(&temp_keys)
+                        .unwrap();
+                    let event_json = crate::relay::ClientMessage::Event { event: new_event };
+                    let _ = &app
+                        .relays
+                        .send(ewebsock::WsMessage::Text(
+                            serde_json::to_string(&event_json).unwrap(),
+                        ))
+                        .unwrap();
+                }
+
+                if ui.button("Get kind 1 notes").clicked() {
+                    let mut filter = nostr::types::Filter::new();
+                    filter = filter.kind(nostr::Kind::TextNote);
+                    let mut sub = crate::relay::Subscription::default();
+                    sub.filter(filter);
+                    let c_msg = crate::relay::ClientMessage::from(sub);
+
+                    let _ = &app
+                        .relays
+                        .send(ewebsock::WsMessage::Text(
+                            serde_json::to_string(&c_msg).unwrap(),
+                        ))
+                        .unwrap();
+                }
+
                 TableBuilder::new(ui)
                     .column(Column::auto())
                     .column(Column::auto())
@@ -169,11 +218,47 @@ impl eframe::App for Hoot {
                     .column(Column::remainder())
                     .column(Column::remainder())
                     .striped(true)
-                    .auto_shrink(Vec2b { x: false, y: false })
                     .sense(Sense::click())
+                    .auto_shrink(Vec2b { x: false, y: false })
                     .header(20.0, |_header| {})
                     .body(|mut body| {
-                        puffin::profile_scope!("table rendering");
+                        for event in app.events.clone() {
+                            body.row(30.0, |mut row| {
+                                row.col(|ui| {
+                                    ui.checkbox(&mut false, "");
+                                });
+                                row.col(|ui| {
+                                    ui.checkbox(&mut false, "");
+                                });
+                                row.col(|ui| {
+                                    ui.label(event.pubkey.to_string());
+                                });
+                                row.col(|ui| {
+                                    ui.label(event.content.clone());
+                                });
+                                row.col(|ui| {
+                                    ui.label("2 minutes ago");
+                                });
+                            });
+                        }
+                        body.row(30.0, |mut row| {
+                            row.col(|ui| {
+                                ui.checkbox(&mut false, "");
+                            });
+                            row.col(|ui| {
+                                ui.checkbox(&mut false, "");
+                            });
+                            row.col(|ui| {
+                                ui.label("Elon Musk");
+                            });
+                            row.col(|ui| {
+                                ui.label("Second Test Message");
+                            });
+                            row.col(|ui| {
+                                ui.label("2 minutes ago");
+                            });
+                        });
+
                         body.row(30.0, |mut row| {
                             row.col(|ui| {
                                 ui.checkbox(&mut false, "");
@@ -185,59 +270,51 @@ impl eframe::App for Hoot {
                                 ui.label("Jack Chakany");
                             });
                             row.col(|ui| {
-                                ui.label("Hello! Just checking in...");
+                                ui.label("Message Content");
                             });
                             row.col(|ui| {
-                                ui.label("5 min ago");
+                                ui.label("5 minutes ago");
                             });
-
-                            if row.response().clicked() {
-                                self.current_page = Page::Post;
-                            }
-                        });
-                        body.row(30.0, |mut row| {
-                            row.col(|ui| {
-                                ui.checkbox(&mut false, "");
-                            });
-                            row.col(|ui| {
-                                ui.checkbox(&mut false, "");
-                            });
-                            row.col(|ui| {
-                                ui.label("Karnage");
-                            });
-                            row.col(|ui| {
-                                ui.label("New designs!");
-                            });
-                            row.col(|ui| {
-                                ui.label("10 min ago");
-                            });
-
-                            if row.response().clicked() {
-                                self.current_page = Page::Post;
-                            }
                         });
                     });
-            }
-            Page::Drafts => {
-                ui.heading("Drafts");
-            }
-            Page::Starred => {
-                ui.heading("Starred");
-            }
-            Page::Archived => {
-                ui.heading("Archived");
-            }
-            Page::Trash => {
-                ui.heading("Trash");
-            }
-            Page::Post => {
-                // used for viewing messages duh
-                ui.heading("Message");
-                ui.label(format!("{}", self.focused_post));
+            } else if app.page == Page::Settings {
+                ui.heading("Settings");
+                ui::settings::SettingsScreen::ui(app, ui);
             }
         });
     }
 }
+
+impl Hoot {
+    fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        let storage_dir = eframe::storage_dir("Hoot").unwrap();
+        let mut ndb_config = nostrdb::Config::new();
+        ndb_config.set_ingester_threads(3);
+
+        let ndb = nostrdb::Ndb::new(storage_dir.to_str().unwrap(), &ndb_config)
+            .expect("could not load nostrdb");
+        Self {
+            page: Page::Inbox,
+            focused_post: "".into(),
+            status: HootStatus::Initalizing,
+            state: Default::default(),
+            relays: relay::RelayPool::new(),
+            ndb,
+            events: Vec::new(),
+            windows: Vec::new(),
+            account_manager: account_manager::AccountManager::new(),
+        }
+    }
+}
+
+impl eframe::App for Hoot {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        update_app(self, ctx);
+        render_app(self, ctx);
+    }
+}
+
+#[cfg(feature = "profiling")]
 fn start_puffin_server() {
     puffin::set_scopes_on(true); // tell puffin to collect data
 

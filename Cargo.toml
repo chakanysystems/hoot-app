@@ -5,18 +5,26 @@ authors = ["Jack Chakany <jack@chakany.systems>"]
 edition = "2021"
 publish = false
 
+[features]
+profiling = ["dep:puffin", "dep:puffin_http", "eframe/puffin", "egui_extras/puffin"]
+
 [dependencies]
-eframe = { version = "0.27.2", features = ["default", "puffin"] }
+eframe = { version = "0.27.2", features = ["default", "persistence"] }
 egui_extras = { version = "0.27.2", features = [
     "file",
     "image",
     "svg",
-    "puffin",
 ] }
+egui_tabs = { git = "https://github.com/damus-io/egui-tabs", rev = "120971fc43db6ba0b6f194f4bd4a66f7e00a4e22" }
 image = { version = "0.25.1", features = ["jpeg", "png"] }
 tracing = "0.1.40"
 tracing-appender = "0.2.3"
 tracing-subscriber = "0.3.18"
-yandk = { path = "../yandk", features = ["coordinator"] }
-puffin = "0.19.0"
-puffin_http = "0.16.0"
+puffin = { version = "0.19.0", optional = true }
+puffin_http = { version = "0.16.0", optional = true }
+ewebsock = { version = "0.6.0", features = ["tls"] }
+nostrdb = { git = "https://github.com/damus-io/nostrdb-rs", rev = "ee8afeeb0b6695fca6d27dd0b74a8dc159e37b95" }
+rand = "0.8.5"
+nostr = { version = "0.32.1", features = ["std"] }
+serde = "1.0.204"
+serde_json = "1.0.121"
