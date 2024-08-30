@@ -2,10 +2,8 @@
 
 use eframe::egui::{self, FontDefinitions, Sense, Vec2b};
 use egui::FontFamily::Proportional;
-use egui::TextStyle::*;
-use egui::{Align, FontId, Layout};
 use egui_extras::{Column, TableBuilder};
-use tracing::{debug, error, info, Level};
+use tracing::{error, info, Level};
 
 mod account_manager;
 mod error;

@@ -40,7 +40,7 @@ impl From<WsMessage> for RelayMessage {
                         panic!("could not parse message: {}", e);
                     }
                 };
-                return parsed;
+                parsed
             }
             _ => {
                 panic!("Cannot parse anything but text into a RelayMessage");
@@ -125,7 +125,7 @@ impl<'de> Deserialize<'de> for RelayMessage {
                         Ok(RelayMessage::Notice { message })
                     }
                     _ => Err(serde::de::Error::invalid_value(
-                        serde::de::Unexpected::Str(&tag),
+                        serde::de::Unexpected::Str(tag),
                         &self,
                     )),
                 }

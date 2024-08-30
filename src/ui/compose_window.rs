@@ -1,4 +1,3 @@
-use crate::Hoot;
 use eframe::egui::{self, RichText};
 use rand::random;
 
@@ -8,6 +7,12 @@ pub struct ComposeWindow {
     subject: String,
     to_field: String,
     content: String,
+}
+
+impl Default for ComposeWindow {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ComposeWindow {
