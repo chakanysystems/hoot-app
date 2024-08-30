@@ -21,7 +21,7 @@ impl AccountManager {
 
     pub fn load_keys(&mut self) -> Result<Vec<Keys>, Error> {
         let mut keys = self.get_keys()?;
-        keys.extend(self.loaded_keys.drain(..));
+        keys.append(&mut self.loaded_keys);
         keys.dedup();
         self.loaded_keys = keys.clone();
 
@@ -40,7 +40,7 @@ impl AccountManager {
     fn get_platform_keystorage() -> KeyStorageType {
         #[cfg(target_os = "linux")]
         {
-            return KeyStorageType::Linux;
+            KeyStorageType::Linux
         }
 
         #[cfg(not(target_os = "linux"))]
