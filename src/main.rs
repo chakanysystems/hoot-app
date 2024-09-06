@@ -210,6 +210,8 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                         .unwrap();
                 }
 
+                ui.label(format!("total events rendered: {}", app.events.len()));
+
                 TableBuilder::new(ui)
                     .column(Column::auto())
                     .column(Column::auto())
