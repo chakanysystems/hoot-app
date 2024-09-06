@@ -60,6 +60,7 @@ pub enum Page {
     OnboardingNew,
     OnboardingNewShowKey,
     OnboardingReturning,
+    Post,
 }
 
 // for storing the state of different components and such.
@@ -220,26 +221,10 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                     .auto_shrink(Vec2b { x: false, y: false })
                     .header(20.0, |_header| {})
                     .body(|mut body| {
-                        for event in app.events.clone() {
-                            body.row(30.0, |mut row| {
-                                row.col(|ui| {
-                                    ui.checkbox(&mut false, "");
-                                });
-                                row.col(|ui| {
-                                    ui.checkbox(&mut false, "");
-                                });
-                                row.col(|ui| {
-                                    ui.label(event.pubkey.to_string());
-                                });
-                                row.col(|ui| {
-                                    ui.label(event.content.clone());
-                                });
-                                row.col(|ui| {
-                                    ui.label("2 minutes ago");
-                                });
-                            });
-                        }
-                        body.row(30.0, |mut row| {
+                        let row_height = 30.0;
+                        let events = app.events.clone();
+                        body.rows(row_height, events.len(), |mut row| {
+                            let row_index = row.index();
                             row.col(|ui| {
                                 ui.checkbox(&mut false, "");
                             });
@@ -247,37 +232,37 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                                 ui.checkbox(&mut false, "");
                             });
                             row.col(|ui| {
-                                ui.label("Elon Musk");
+                                ui.label(events[row_index].pubkey.to_string());
                             });
                             row.col(|ui| {
-                                ui.label("Second Test Message");
+                                ui.label(events[row_index].content.clone());
                             });
                             row.col(|ui| {
                                 ui.label("2 minutes ago");
                             });
-                        });
 
-                        body.row(30.0, |mut row| {
-                            row.col(|ui| {
-                                ui.checkbox(&mut false, "");
-                            });
-                            row.col(|ui| {
-                                ui.checkbox(&mut false, "");
-                            });
-                            row.col(|ui| {
-                                ui.label("Jack Chakany");
-                            });
-                            row.col(|ui| {
-                                ui.label("Message Content");
-                            });
-                            row.col(|ui| {
-                                ui.label("5 minutes ago");
-                            });
+                            if row.response().clicked() {
+                                println!("clicked: {}", events[row_index].content.clone());
+                                app.focused_post = events[row_index].id().to_string();
+                                app.page = Page::Post;
+                            }
                         });
                     });
             } else if app.page == Page::Settings {
                 ui.heading("Settings");
                 ui::settings::SettingsScreen::ui(app, ui);
+            } else if app.page == Page::Post {
+                assert!(
+                    !app.focused_post.is_empty(),
+                    "focused_post should not be empty when Page::Post"
+                );
+
+                let event_to_display = app.events.iter().find(|&x| x.id().to_string() == app.focused_post).expect("event id should be present inside event list");
+
+                ui.heading("View Message");
+                ui.label(format!("Content: {}", event_to_display.content));
+                ui.label(format!("ID: {}", event_to_display.id().to_string()));
+                ui.label(format!("Author: {}", event_to_display.pubkey.to_string()));
             }
         });
     }
