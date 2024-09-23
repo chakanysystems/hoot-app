@@ -10,6 +10,7 @@ mod error;
 mod keystorage;
 mod relay;
 mod ui;
+mod mail_event;
 
 fn main() -> Result<(), eframe::Error> {
     let (non_blocking, _guard) = tracing_appender::non_blocking(std::io::stdout()); // add log files in prod one day
