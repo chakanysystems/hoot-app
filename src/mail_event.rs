@@ -4,11 +4,11 @@ use nostr::{EventBuilder, Event, PublicKey, Kind, Tag, Keys};
 pub const MAIL_EVENT_KIND: u16 = 1059;
 
 pub struct MailMessage {
-    to: Vec<PublicKey>,
-    cc: Vec<PublicKey>,
-    bcc: Vec<PublicKey>,
-    subject: String,
-    content: String,
+    pub to: Vec<PublicKey>,
+    pub cc: Vec<PublicKey>,
+    pub bcc: Vec<PublicKey>,
+    pub subject: String,
+    pub content: String,
 }
 
 impl MailMessage {

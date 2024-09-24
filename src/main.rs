@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // for windows release
 
+use std::collections::HashMap;
 use eframe::egui::{self, FontDefinitions, Sense, Vec2b};
 use egui::FontFamily::Proportional;
 use egui_extras::{Column, TableBuilder};
@@ -67,6 +68,7 @@ pub enum Page {
 // for storing the state of different components and such.
 #[derive(Default)]
 pub struct HootState {
+    pub compose_window: HashMap<egui::Id, ui::compose_window::ComposeWindowState>,
     pub onboarding: ui::onboarding::OnboardingState,
     pub settings: ui::settings::SettingsState,
 }
@@ -79,7 +81,6 @@ pub struct Hoot {
     relays: relay::RelayPool,
     ndb: nostrdb::Ndb,
     events: Vec<nostr::Event>,
-    pub windows: Vec<Box<ui::compose_window::ComposeWindow>>,
     account_manager: account_manager::AccountManager,
 }
 
@@ -169,16 +170,20 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // todo: fix
-            for window in &mut app.windows {
-                window.show(ui);
+            for window_id in app.state.compose_window.clone().into_keys() {
+                ui::compose_window::ComposeWindow::show(app, ui, window_id);
             }
 
             if app.page == Page::Inbox {
                 ui.label("hello there!");
                 if ui.button("Compose").clicked() {
-                    let mut new_window = Box::new(ui::compose_window::ComposeWindow::new());
-                    new_window.show(ui);
-                    app.windows.push(new_window);
+                    let state = ui::compose_window::ComposeWindowState {
+                        subject: String::new(),
+                        to_field: String::new(),
+                        content: String::new(),
+                        selected_account: None,
+                    };
+                    app.state.compose_window.insert(egui::Id::new(rand::random::<u32>()), state);
                 }
 
                 if ui.button("Send Test Event").clicked() {
@@ -287,7 +292,6 @@ impl Hoot {
             relays: relay::RelayPool::new(),
             ndb,
             events: Vec::new(),
-            windows: Vec::new(),
             account_manager: account_manager::AccountManager::new(),
         }
     }

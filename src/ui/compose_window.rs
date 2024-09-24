@@ -1,43 +1,82 @@
+use tracing::{info, error};
 use eframe::egui::{self, RichText};
-use rand::random;
+use nostr::{Keys, PublicKey};
+use crate::mail_event::MailMessage;
 
-pub struct ComposeWindow {
-    title: Option<RichText>,
-    id: egui::Id,
-    subject: String,
-    to_field: String,
-    content: String,
+#[derive(Debug, Clone)]
+pub struct ComposeWindowState {
+    pub subject: String,
+    pub to_field: String,
+    pub content: String,
+    pub selected_account: Option<Keys>,
 }
 
-impl Default for ComposeWindow {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+pub struct ComposeWindow {}
 
 impl ComposeWindow {
-    pub fn new() -> Self {
-        Self {
-            title: None,
-            id: egui::Id::new(random::<u32>()),
-            subject: String::from("New Message"),
-            to_field: String::new(),
-            content: String::new(),
-        }
-    }
-
-    pub fn show(&mut self, ui: &mut egui::Ui) {
-        egui::Window::new(&self.subject)
-            .id(self.id)
+    pub fn show(app: &mut crate::Hoot, ui: &mut egui::Ui, id: egui::Id) {
+        let state = app.state.compose_window.get_mut(&id).expect("no state found for id");
+        egui::Window::new(&state.subject)
+            .id(id)
             .show(ui.ctx(), |ui| {
                 ui.label("Hello!");
                 ui.vertical(|ui| {
-                    ui.text_edit_singleline(&mut self.to_field);
-                    ui.text_edit_singleline(&mut self.subject);
-                    ui.add_sized(
-                        ui.available_size(),
-                        egui::TextEdit::multiline(&mut self.content),
-                    );
+                    ui.horizontal(|ui| {
+                        ui.label("To:");
+                        ui.text_edit_singleline(&mut state.to_field);
+                    });
+
+                    {
+                        // god this is such a fucking mess
+                        let accounts = app.account_manager.loaded_keys.clone();
+                        use nostr::ToBech32;
+                        let mut formatted_key = String::new();
+                        if state.selected_account.is_some() {
+                            formatted_key = state.selected_account.clone().unwrap().public_key().to_bech32().unwrap();
+                        }
+
+                        egui::ComboBox::from_label("Select Keys to Send With")
+                            .selected_text(format!("{}", formatted_key))
+                            .show_ui(ui, |ui| {
+                                for key in accounts {
+                                    ui.selectable_value(&mut state.selected_account, Some(key.clone()), key.public_key().to_bech32().unwrap());
+                                }
+                            });
+                    }
+
+                    ui.horizontal(|ui| {
+                        ui.label("Subject:");
+                        ui.text_edit_singleline(&mut state.subject);
+                    });
+                    ui.label("Body:");
+                    ui.text_edit_multiline(&mut state.content);
+
+                    if ui.button("Send").clicked() {
+                        if state.selected_account.is_none() {
+                            error!("No Account Selected!");
+                            return;
+                        }
+                        // convert to field into PublicKey object
+                        let to_field = state.to_field.clone();
+                        
+                        let mut recipient_keys: Vec<PublicKey> = Vec::new();
+                        for key_string in to_field.split_whitespace() {
+                            let new_key = PublicKey::from_hex(key_string).expect("could not parse key"); // TODO: fail gracefully.
+                            recipient_keys.push(new_key);
+                        }
+
+                        let mut msg = MailMessage {
+                            to: recipient_keys,
+                            cc: vec![],
+                            bcc: vec![],
+                            subject: state.subject.clone(),
+                            content: state.content.clone(),
+                        };
+                        let events_to_send = msg.to_events(&state.selected_account.clone().unwrap());
+
+                        info!("new events! {:?}", events_to_send);
+                        // send over wire
+                    }
                 });
             });
     }
