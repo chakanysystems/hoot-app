@@ -1,4 +1,4 @@
-use tracing::{info, error};
+use tracing::{info, debug, error};
 use eframe::egui::{self, RichText};
 use nostr::{Keys, PublicKey};
 use crate::mail_event::MailMessage;
@@ -61,8 +61,16 @@ impl ComposeWindow {
                         
                         let mut recipient_keys: Vec<PublicKey> = Vec::new();
                         for key_string in to_field.split_whitespace() {
-                            let new_key = PublicKey::from_hex(key_string).expect("could not parse key"); // TODO: fail gracefully.
-                            recipient_keys.push(new_key);
+                            use nostr::FromBech32;
+                            match PublicKey::from_bech32(key_string) {
+                                Ok(k) => recipient_keys.push(k),
+                                Err(e) => debug!("could not parse public key as bech32: {}", e),
+                            };
+
+                            match PublicKey::from_hex(key_string) {
+                                Ok(k) => recipient_keys.push(k),
+                                Err(e) => debug!("could not parse public key as hex: {}", e),
+                            };
                         }
 
                         let mut msg = MailMessage {
