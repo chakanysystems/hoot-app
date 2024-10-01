@@ -1,6 +1,5 @@
+use tracing::{error, info, debug};
 use ewebsock::{WsEvent, WsMessage};
-use tracing::{error, info};
-
 use crate::error::{Error, Result};
 
 mod pool;
@@ -52,22 +51,22 @@ impl Relay {
         if self.status != RelayStatus::Connected {
             return Err(Error::RelayNotConnected);
         }
+        debug!("sending message to {}: {:?}", self.url, message);
 
         self.writer.send(message);
         Ok(())
     }
 
-    pub fn try_recv(&mut self) -> Option<String> {
+    pub fn try_recv(&mut self) -> Option<WsEvent> {
         if let Some(event) = self.reader.try_recv() {
             use WsEvent::*;
             match event {
-                Message(message) => {
-                    return self.handle_message(message);
+                Message(_) => {
                 }
                 Opened => {
                     self.status = RelayStatus::Connected;
                 }
-                Error(error) => {
+                Error(ref error) => {
                     error!("error in websocket connection to {}: {}", self.url, error);
                 }
                 Closed => {
@@ -75,34 +74,13 @@ impl Relay {
                     self.status = RelayStatus::Disconnected;
                 }
             }
+
+            return Some(event);
         }
 
         None
     }
 
-    fn handle_message(&mut self, message: WsMessage) -> Option<String> {
-        use WsMessage::*;
-        match message {
-            Text(txt) => {
-                return Some(txt);
-            }
-            Binary(..) => {
-                error!("recived binary messsage, your move semisol");
-            }
-            Ping(d) => {
-                let pong_msg = WsMessage::Pong(d);
-                match self.send(pong_msg) {
-                    Ok(_) => {}
-                    Err(e) => error!("error when sending websocket message {:?}", e),
-                }
-            }
-            _ => {
-                // who cares
-            }
-        }
-
-        None
-    }
 
     pub fn ping(&mut self) {
         let ping_msg = WsMessage::Ping(Vec::new());

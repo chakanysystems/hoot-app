@@ -1,3 +1,4 @@
+#![cfg(target_os = "linux")]
 use super::{Error, KeyStorage};
 use nostr::Keys;
 

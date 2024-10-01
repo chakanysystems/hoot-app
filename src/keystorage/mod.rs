@@ -1,11 +1,26 @@
 use nostr::Keys;
 
 mod linux;
+mod macos;
+
+#[cfg(target_os = "linux")]
 use linux::LinuxKeyStorage;
+#[cfg(target_os = "macos")]
+use macos::MacOSKeyStorage;
+
+// for macos keychain service name
+#[cfg(debug_assertions)]
+const SERVICE_NAME: &'static str = "com.chakanysystems.hoot-dev";
+#[cfg(not(debug_assertions))]
+const SERVICE_NAME: &'static str = "com.chakanysystems.hoot";
 
 pub enum Error {
     IOError(std::io::Error),
+    Addition(String),
+    Removal(String),
 }
+
+pub type Result<T> = core::result::Result<T, Error>;
 
 impl From<std::io::Error> for Error {
     fn from(value: std::io::Error) -> Self {
@@ -17,6 +32,8 @@ impl std::fmt::Debug for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::IOError(err) => write!(f, "IOError: {:?}", err),
+            Error::Addition(key) => write!(f, "Could not add key {}", key),
+            Error::Removal(key) => write!(f, "Could not remove key {}", key),
         }
     }
 }
@@ -25,6 +42,8 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::IOError(err) => write!(f, "IO error: {}", err),
+            Error::Addition(key) => write!(f, "Could not add key {}", key),
+            Error::Removal(key) => write!(f, "Could not remove key {}", key),
         }
     }
 }
@@ -33,36 +52,44 @@ pub enum KeyStorageType {
     None,
     #[cfg(target_os = "linux")]
     Linux,
+    #[cfg(target_os = "macos")]
+    MacOS,
 }
 
 pub trait KeyStorage {
-    fn get_keys(&self) -> Result<Vec<Keys>, Error>;
-    fn add_key(&self, key: &Keys) -> Result<(), Error>;
-    fn remove_key(&self, key: &Keys) -> Result<(), Error>;
+    fn get_keys(&self) -> Result<Vec<Keys>>;
+    fn add_key(&self, key: &Keys) -> Result<()>;
+    fn remove_key(&self, key: &Keys) -> Result<()>;
 }
 
 impl KeyStorage for KeyStorageType {
-    fn add_key(&self, key: &Keys) -> Result<(), Error> {
+    fn add_key(&self, key: &Keys) -> Result<()> {
         match self {
             Self::None => Ok(()),
             #[cfg(target_os = "linux")]
             Self::Linux => LinuxKeyStorage::new().add_key(key),
+            #[cfg(target_os = "macos")]
+            Self::MacOS => MacOSKeyStorage::new(SERVICE_NAME).add_key(key),
         }
     }
 
-    fn get_keys(&self) -> Result<Vec<Keys>, Error> {
+    fn get_keys(&self) -> Result<Vec<Keys>> {
         match self {
             Self::None => Ok(Vec::new()),
             #[cfg(target_os = "linux")]
             Self::Linux => LinuxKeyStorage::new().get_keys(),
+            #[cfg(target_os = "macos")]
+            Self::MacOS => MacOSKeyStorage::new(SERVICE_NAME).get_keys(),
         }
     }
 
-    fn remove_key(&self, key: &Keys) -> Result<(), Error> {
+    fn remove_key(&self, key: &Keys) -> Result<()> {
         match self {
             Self::None => Ok(()),
             #[cfg(target_os = "linux")]
             Self::Linux => LinuxKeyStorage::new().remove_key(key),
+            #[cfg(target_os = "macos")]
+            Self::MacOS => MacOSKeyStorage::new(SERVICE_NAME).remove_key(key),
         }
     }
 }

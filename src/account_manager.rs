@@ -37,10 +37,16 @@ impl AccountManager {
         Ok(())
     }
 
+    #[allow(unreachable_code)]
     fn get_platform_keystorage() -> KeyStorageType {
         #[cfg(target_os = "linux")]
         {
-            KeyStorageType::Linux
+            return KeyStorageType::Linux;
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            return KeyStorageType::MacOS;
         }
 
         #[cfg(not(target_os = "linux"))]

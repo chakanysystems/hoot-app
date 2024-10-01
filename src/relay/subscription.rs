@@ -23,7 +23,9 @@ impl Subscription {
         Self { id, filters }
     }
 
-    pub fn filter(&mut self, filter: Filter) {
-        self.filters.push(filter)
+    pub fn filter(&mut self, filter: Filter) -> &mut Self {
+        self.filters.push(filter);
+
+        self
     }
 }

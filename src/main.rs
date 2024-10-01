@@ -104,10 +104,25 @@ fn update_app(app: &mut Hoot, ctx: &egui::Context) {
             Ok(..) => {}
             Err(v) => error!("something went wrong trying to load keys: {}", v),
         }
-        app.relays
+        let _ = app.relays
             .add_url("wss://relay.damus.io".to_string(), wake_up.clone());
-        app.relays
+        let _ = app.relays
             .add_url("wss://relay-dev.hoot.sh".to_string(), wake_up);
+
+        if app.account_manager.loaded_keys.len() > 0 {
+            let mut pks: Vec<nostr::PublicKey> = Vec::new();
+
+            for keys in app.account_manager.loaded_keys.clone() {
+                pks.push(keys.public_key());
+            }
+
+            let mut gw_sub = relay::Subscription::default();
+            gw_sub.filter(nostr::Filter::new().authors(pks));
+
+            // TODO: fix error handling
+            let _ = app.relays.add_subscription(gw_sub);
+        }
+        
         app.status = HootStatus::Ready;
         info!("Hoot Ready");
     }
