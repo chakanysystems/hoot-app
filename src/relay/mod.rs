@@ -1,6 +1,6 @@
-use tracing::{error, info, debug};
-use ewebsock::{WsEvent, WsMessage};
 use crate::error::{Error, Result};
+use ewebsock::{WsEvent, WsMessage};
+use tracing::{debug, error, info};
 
 mod pool;
 pub use pool::RelayPool;
@@ -61,8 +61,7 @@ impl Relay {
         if let Some(event) = self.reader.try_recv() {
             use WsEvent::*;
             match event {
-                Message(_) => {
-                }
+                Message(_) => {}
                 Opened => {
                     self.status = RelayStatus::Connected;
                 }
@@ -80,7 +79,6 @@ impl Relay {
 
         None
     }
-
 
     pub fn ping(&mut self) {
         let ping_msg = WsMessage::Ping(Vec::new());

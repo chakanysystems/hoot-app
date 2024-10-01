@@ -3,7 +3,7 @@
 use nostr::{Keys, PublicKey, SecretKey};
 use tracing::error;
 
-use super::{Result, Error, KeyStorage};
+use super::{Error, KeyStorage, Result};
 
 use security_framework::item::{ItemClass, ItemSearchOptions, Limit, SearchResult};
 use security_framework::passwords::{delete_generic_password, set_generic_password};
@@ -14,13 +14,15 @@ pub struct MacOSKeyStorage {
 
 impl MacOSKeyStorage {
     pub fn new(service_name: &'static str) -> Self {
-        Self {
-            service_name,
-        }
+        Self { service_name }
     }
 
     fn add_key(&self, key: &Keys) -> Result<()> {
-        match set_generic_password(self.service_name, &key.public_key().to_hex(), key.secret_key().unwrap().as_secret_bytes()) {
+        match set_generic_password(
+            self.service_name,
+            &key.public_key().to_hex(),
+            key.secret_key().unwrap().as_secret_bytes(),
+        ) {
             Ok(_) => Ok(()),
             Err(_) => Err(Error::Addition(key.public_key().to_hex())),
         }

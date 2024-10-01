@@ -1,5 +1,5 @@
+use nostr::{Event, EventBuilder, Keys, Kind, PublicKey, Tag};
 use std::collections::HashMap;
-use nostr::{EventBuilder, Event, PublicKey, Kind, Tag, Keys};
 
 pub const MAIL_EVENT_KIND: u16 = 1059;
 
@@ -21,11 +21,13 @@ impl MailMessage {
             pubkeys_to_send_to.push(*pubkey);
         }
 
-        let base_event = EventBuilder::new(Kind::Custom(MAIL_EVENT_KIND), &self.content, []).to_unsigned_event(sending_keys.clone().public_key());
+        let base_event = EventBuilder::new(Kind::Custom(MAIL_EVENT_KIND), &self.content, [])
+            .to_unsigned_event(sending_keys.clone().public_key());
 
         let mut event_list: HashMap<PublicKey, Event> = HashMap::new();
         for pubkey in pubkeys_to_send_to {
-            let wrapped_event = EventBuilder::gift_wrap(sending_keys, &pubkey, base_event.clone(), None).unwrap();
+            let wrapped_event =
+                EventBuilder::gift_wrap(sending_keys, &pubkey, base_event.clone(), None).unwrap();
             event_list.insert(pubkey, wrapped_event);
         }
 

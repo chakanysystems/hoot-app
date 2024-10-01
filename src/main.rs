@@ -1,17 +1,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // for windows release
 
-use std::collections::HashMap;
 use eframe::egui::{self, FontDefinitions, Sense, Vec2b};
 use egui::FontFamily::Proportional;
 use egui_extras::{Column, TableBuilder};
+use std::collections::HashMap;
 use tracing::{debug, error, info, Level};
 
 mod account_manager;
 mod error;
 mod keystorage;
+mod mail_event;
 mod relay;
 mod ui;
-mod mail_event;
 
 fn main() -> Result<(), eframe::Error> {
     let (non_blocking, _guard) = tracing_appender::non_blocking(std::io::stdout()); // add log files in prod one day
@@ -104,9 +104,11 @@ fn update_app(app: &mut Hoot, ctx: &egui::Context) {
             Ok(..) => {}
             Err(v) => error!("something went wrong trying to load keys: {}", v),
         }
-        let _ = app.relays
+        let _ = app
+            .relays
             .add_url("wss://relay.damus.io".to_string(), wake_up.clone());
-        let _ = app.relays
+        let _ = app
+            .relays
             .add_url("wss://relay-dev.hoot.sh".to_string(), wake_up);
 
         if app.account_manager.loaded_keys.len() > 0 {
@@ -122,7 +124,7 @@ fn update_app(app: &mut Hoot, ctx: &egui::Context) {
             // TODO: fix error handling
             let _ = app.relays.add_subscription(gw_sub);
         }
-        
+
         app.status = HootStatus::Ready;
         info!("Hoot Ready");
     }
@@ -198,7 +200,9 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                         content: String::new(),
                         selected_account: None,
                     };
-                    app.state.compose_window.insert(egui::Id::new(rand::random::<u32>()), state);
+                    app.state
+                        .compose_window
+                        .insert(egui::Id::new(rand::random::<u32>()), state);
                 }
 
                 if ui.button("Send Test Event").clicked() {
@@ -280,7 +284,11 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                     "focused_post should not be empty when Page::Post"
                 );
 
-                let event_to_display = app.events.iter().find(|&x| x.id().to_string() == app.focused_post).expect("event id should be present inside event list");
+                let event_to_display = app
+                    .events
+                    .iter()
+                    .find(|&x| x.id().to_string() == app.focused_post)
+                    .expect("event id should be present inside event list");
 
                 ui.heading("View Message");
                 ui.label(format!("Content: {}", event_to_display.content));

@@ -1,7 +1,7 @@
-use tracing::{info, debug, error};
+use crate::mail_event::MailMessage;
 use eframe::egui::{self, RichText};
 use nostr::{Keys, PublicKey};
-use crate::mail_event::MailMessage;
+use tracing::{debug, error, info};
 
 #[derive(Debug, Clone)]
 pub struct ComposeWindowState {
@@ -15,7 +15,11 @@ pub struct ComposeWindow {}
 
 impl ComposeWindow {
     pub fn show(app: &mut crate::Hoot, ui: &mut egui::Ui, id: egui::Id) {
-        let state = app.state.compose_window.get_mut(&id).expect("no state found for id");
+        let state = app
+            .state
+            .compose_window
+            .get_mut(&id)
+            .expect("no state found for id");
         egui::Window::new(&state.subject)
             .id(id)
             .show(ui.ctx(), |ui| {
@@ -32,14 +36,24 @@ impl ComposeWindow {
                         use nostr::ToBech32;
                         let mut formatted_key = String::new();
                         if state.selected_account.is_some() {
-                            formatted_key = state.selected_account.clone().unwrap().public_key().to_bech32().unwrap();
+                            formatted_key = state
+                                .selected_account
+                                .clone()
+                                .unwrap()
+                                .public_key()
+                                .to_bech32()
+                                .unwrap();
                         }
 
                         egui::ComboBox::from_label("Select Keys to Send With")
                             .selected_text(format!("{}", formatted_key))
                             .show_ui(ui, |ui| {
                                 for key in accounts {
-                                    ui.selectable_value(&mut state.selected_account, Some(key.clone()), key.public_key().to_bech32().unwrap());
+                                    ui.selectable_value(
+                                        &mut state.selected_account,
+                                        Some(key.clone()),
+                                        key.public_key().to_bech32().unwrap(),
+                                    );
                                 }
                             });
                     }
@@ -58,7 +72,7 @@ impl ComposeWindow {
                         }
                         // convert to field into PublicKey object
                         let to_field = state.to_field.clone();
-                        
+
                         let mut recipient_keys: Vec<PublicKey> = Vec::new();
                         for key_string in to_field.split_whitespace() {
                             use nostr::FromBech32;
@@ -80,7 +94,8 @@ impl ComposeWindow {
                             subject: state.subject.clone(),
                             content: state.content.clone(),
                         };
-                        let events_to_send = msg.to_events(&state.selected_account.clone().unwrap());
+                        let events_to_send =
+                            msg.to_events(&state.selected_account.clone().unwrap());
 
                         info!("new events! {:?}", events_to_send);
                         // send over wire

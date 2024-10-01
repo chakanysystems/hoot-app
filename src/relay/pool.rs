@@ -1,6 +1,6 @@
 use crate::error::Result;
-use crate::relay::Subscription;
 use crate::relay::message::ClientMessage;
+use crate::relay::Subscription;
 use crate::relay::{Relay, RelayStatus};
 use ewebsock::{WsEvent, WsMessage};
 use std::collections::HashMap;
@@ -36,7 +36,11 @@ impl RelayPool {
         Ok(())
     }
 
-    pub fn add_url(&mut self, url: String, wake_up: impl Fn() + Send + Sync + 'static) -> Result<()> {
+    pub fn add_url(
+        &mut self,
+        url: String,
+        wake_up: impl Fn() + Send + Sync + 'static,
+    ) -> Result<()> {
         let relay = Relay::new_with_wakeup(url.clone(), wake_up);
         self.relays.insert(url, relay);
 
@@ -67,12 +71,14 @@ impl RelayPool {
                                 Err(e) => {
                                     error!("could not turn subscription into json: {}", e);
                                     continue;
-                                },
+                                }
                             };
 
                             match relay.send(ewebsock::WsMessage::Text(payload)) {
                                 Ok(_) => (),
-                                Err(e) => error!("could not send subscription to {}: {:?}", relay.url, e),
+                                Err(e) => {
+                                    error!("could not send subscription to {}: {:?}", relay.url, e)
+                                }
                             };
                         }
                     }
