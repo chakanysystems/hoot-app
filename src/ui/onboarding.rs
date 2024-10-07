@@ -49,7 +49,9 @@ impl OnboardingScreen {
         use crate::keystorage::KeyStorage;
         use nostr::ToBech32;
 
-        let first_key = app.account_manager.loaded_keys[0].clone();
+        // here, we are assuming that the most recent key added is the one that was generated in
+        // onboarding_new()'s button click.
+        let first_key = app.account_manager.loaded_keys.last().expect("wanted a key from last screen").clone();
         ui.label(format!(
             "New identity: {}",
             first_key.public_key().to_bech32().unwrap()

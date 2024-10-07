@@ -20,7 +20,7 @@ impl MacOSKeyStorage {
     fn add_key(&self, key: &Keys) -> Result<()> {
         match set_generic_password(
             self.service_name,
-            &key.public_key().to_hex(),
+            &key.public_key().to_hex().as_str(),
             key.secret_key().unwrap().as_secret_bytes(),
         ) {
             Ok(_) => Ok(()),
