@@ -93,13 +93,13 @@ enum HootStatus {
 fn update_app(app: &mut Hoot, ctx: &egui::Context) {
     #[cfg(feature = "profiling")]
     puffin::profile_function!();
+    let ctx = ctx.clone();
+    let wake_up = move || {
+        ctx.request_repaint();
+    };
 
     if app.status == HootStatus::Initalizing {
         info!("Initalizing Hoot...");
-        let ctx = ctx.clone();
-        let wake_up = move || {
-            ctx.request_repaint();
-        };
         match app.account_manager.load_keys() {
             Ok(..) => {}
             Err(v) => error!("something went wrong trying to load keys: {}", v),
@@ -109,7 +109,7 @@ fn update_app(app: &mut Hoot, ctx: &egui::Context) {
             .add_url("wss://relay.damus.io".to_string(), wake_up.clone());
         let _ = app
             .relays
-            .add_url("wss://relay-dev.hoot.sh".to_string(), wake_up);
+            .add_url("wss://relay-dev.hoot.sh".to_string(), wake_up.clone());
 
         if app.account_manager.loaded_keys.len() > 0 {
             let mut pks: Vec<nostr::PublicKey> = Vec::new();
@@ -128,6 +128,8 @@ fn update_app(app: &mut Hoot, ctx: &egui::Context) {
         app.status = HootStatus::Ready;
         info!("Hoot Ready");
     }
+
+    app.relays.keepalive(wake_up);
 
     let new_val = app.relays.try_recv();
     if new_val.is_some() {

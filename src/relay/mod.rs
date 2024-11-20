@@ -3,7 +3,7 @@ use ewebsock::{WsEvent, WsMessage};
 use tracing::{debug, error, info};
 
 mod pool;
-pub use pool::RelayPool;
+pub use pool::{RelayPool, RELAY_RECONNECT_SECONDS};
 
 mod message;
 pub use message::{ClientMessage, RelayMessage};
@@ -42,9 +42,18 @@ impl Relay {
             status: RelayStatus::Connecting,
         };
 
-        relay.ping();
-
         relay
+    }
+
+    // TODO: investigate whether this can cause a message to be dropped due to the writer being
+    // overwritten
+    pub fn reconnect(&mut self, wake_up: impl Fn() + Send + Sync + 'static) {
+        let (sender, reciever) =
+            ewebsock::connect_with_wakeup(self.url.clone(), ewebsock::Options::default(), wake_up)
+                .unwrap();
+
+        self.reader = reciever;
+        self.writer = sender;
     }
 
     pub fn send(&mut self, message: WsMessage) -> Result<()> {
@@ -67,6 +76,7 @@ impl Relay {
                 }
                 Error(ref error) => {
                     error!("error in websocket connection to {}: {}", self.url, error);
+                    self.status = RelayStatus::Disconnected;
                 }
                 Closed => {
                     info!("connection to {} closed", self.url);

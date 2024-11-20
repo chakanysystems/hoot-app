@@ -4,11 +4,16 @@ use crate::relay::Subscription;
 use crate::relay::{Relay, RelayStatus};
 use ewebsock::{WsEvent, WsMessage};
 use std::collections::HashMap;
-use tracing::error;
+use tracing::{error, debug};
+use std::time::{Instant, Duration};
+
+pub const RELAY_RECONNECT_SECONDS: u64 = 5;
 
 pub struct RelayPool {
     pub relays: HashMap<String, Relay>,
     pub subscriptions: HashMap<String, Subscription>,
+    last_reconnect_attempt: Instant,
+    last_ping: Instant,
 }
 
 impl RelayPool {
@@ -16,6 +21,37 @@ impl RelayPool {
         Self {
             relays: HashMap::new(),
             subscriptions: HashMap::new(),
+            last_reconnect_attempt: Instant::now(),
+            last_ping: Instant::now(),
+        }
+    }
+
+    pub fn get_last_reconnect_attempt(&mut self) -> Instant {
+        return self.last_reconnect_attempt;
+    }
+
+    pub fn keepalive(&mut self, wake_up: impl Fn() + Send + Sync + Clone + 'static) {
+        let now = Instant::now();
+
+        // Check disconnected relays
+        if now.duration_since(self.last_reconnect_attempt) >= Duration::from_secs(RELAY_RECONNECT_SECONDS) {
+            for relay in self.relays.values_mut() {
+                if relay.status != RelayStatus::Connected {
+                    relay.status = RelayStatus::Connecting;
+                    relay.reconnect(wake_up.clone());
+                }
+            }
+            self.last_reconnect_attempt = now;
+        }
+
+        // Ping connected relays
+        if now.duration_since(self.last_ping) >= Duration::from_secs(30) {
+            for relay in self.relays.values_mut() {
+                if relay.status == RelayStatus::Connected {
+                    relay.ping();
+                }
+            }
+            self.last_ping = now;
         }
     }
 
@@ -53,11 +89,12 @@ impl RelayPool {
 
     pub fn try_recv(&mut self) -> Option<String> {
         for relay in self.relays.values_mut() {
+            let relay_url = relay.url.clone();
             if let Some(event) = relay.try_recv() {
                 use WsEvent::*;
                 match event {
                     Message(message) => {
-                        return self.handle_message(message);
+                        return self.handle_message(relay_url, message);
                     }
                     Opened => {
                         for sub in self.subscriptions.clone() {
@@ -91,7 +128,7 @@ impl RelayPool {
         None
     }
 
-    fn handle_message(&mut self, message: WsMessage) -> Option<String> {
+    fn handle_message(&mut self, url: String, message: WsMessage) -> Option<String> {
         use WsMessage::*;
         match message {
             Text(txt) => {
@@ -100,12 +137,15 @@ impl RelayPool {
             Binary(..) => {
                 error!("recived binary messsage, your move semisol");
             }
-            Ping(d) => {
-                let pong_msg = WsMessage::Pong(d);
+            Ping(m) => {
+                let pong_msg = WsMessage::Pong(m);
                 match self.send(pong_msg) {
                     Ok(_) => {}
                     Err(e) => error!("error when sending websocket message {:?}", e),
                 }
+            }
+            Pong(m) => {
+                debug!("pong recieved from {} after approx {} seconds", &url, self.last_ping.elapsed().as_secs());
             }
             _ => {
                 // who cares

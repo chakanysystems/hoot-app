@@ -86,6 +86,7 @@ impl SettingsScreen {
         ui.label("Your Relays:");
         ui.vertical(|ui| {
             let mut relay_to_remove: Option<String> = None;
+            let last_ping = app.relays.get_last_reconnect_attempt();
             for (url, relay) in app.relays.relays.iter() {
                 ui.horizontal(|ui| {
                     use crate::relay::RelayStatus::*;
@@ -103,6 +104,13 @@ impl SettingsScreen {
                     painter.circle_filled(c, r, conn_fill);
 
                     ui.label(url);
+                    // TODO: this only updates when next frame is rendered, which can be more than
+                    // a few seconds between renders. Make it so it updates every second.
+                    if relay.status == crate::relay::RelayStatus::Disconnected {
+                        let next_ping = crate::relay::RELAY_RECONNECT_SECONDS - last_ping.elapsed().as_secs();
+
+                        ui.label(format!("(Attempting reconnect in {} seconds)", next_ping));
+                    }
                     if ui.button("Remove Relay").clicked() {
                         relay_to_remove = Some(url.to_string());
                     }
