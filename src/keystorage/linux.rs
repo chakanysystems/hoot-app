@@ -48,6 +48,7 @@ impl BasicFileStorage {
         let private_key = keypair.secret_key().unwrap().to_secret_hex();
 
         let file_path = Path::new(&self.credentials_dir).join(&public_key);
+
         let mut file = File::create(&file_path)?;
         file.write_all(private_key.as_bytes())?;
 
