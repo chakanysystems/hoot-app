@@ -10,4 +10,13 @@ impl From<serde_json::Error> for Error {
     }
 }
 
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::RelayNotConnected => write!(f, "Relay not connected"),
+            Error::SerdeJson(err) => write!(f, "JSON serialization error: {}", err),
+        }
+    }
+}
+
 pub type Result<T> = core::result::Result<T, Error>;
