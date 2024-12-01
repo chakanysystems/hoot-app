@@ -106,20 +106,13 @@ fn update_app(app: &mut Hoot, ctx: &egui::Context) {
         }
         let _ = app
             .relays
-            .add_url("wss://relay.damus.io".to_string(), wake_up.clone());
-        let _ = app
-            .relays
-            .add_url("wss://relay-dev.hoot.sh".to_string(), wake_up.clone());
+            .add_url("wss://relay.chakany.systems".to_string(), wake_up.clone());
 
         if app.account_manager.loaded_keys.len() > 0 {
-            let mut pks: Vec<nostr::PublicKey> = Vec::new();
-
-            for keys in app.account_manager.loaded_keys.clone() {
-                pks.push(keys.public_key());
-            }
-
             let mut gw_sub = relay::Subscription::default();
-            gw_sub.filter(nostr::Filter::new().authors(pks));
+
+            let filter = nostr::Filter::new().kind(nostr::Kind::Custom(mail_event::MAIL_EVENT_KIND)).custom_tag(nostr::SingleLetterTag { character: nostr::Alphabet::P, uppercase: false }, app.account_manager.loaded_keys.clone().into_iter().map(|keys| keys.public_key()));
+            gw_sub.filter(filter);
 
             // TODO: fix error handling
             let _ = app.relays.add_subscription(gw_sub);

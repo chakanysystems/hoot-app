@@ -1,4 +1,5 @@
 use crate::mail_event::MailMessage;
+use crate::relay::ClientMessage;
 use eframe::egui::{self, RichText};
 use nostr::{Keys, PublicKey};
 use tracing::{debug, error, info};
@@ -99,6 +100,15 @@ impl ComposeWindow {
 
                         info!("new events! {:?}", events_to_send);
                         // send over wire
+                        for event in events_to_send {
+                            match serde_json::to_string(&ClientMessage::Event { event: event.1 }) {
+                                Ok(v) => match app.relays.send(ewebsock::WsMessage::Text(v)) {
+                                    Ok(r) => r,
+                                    Err(e) => error!("could not send event to relays: {}", e),
+                                },
+                                Err(e) => error!("could not serialize event: {}", e),
+                            };
+                        }
                     }
                 });
             });
