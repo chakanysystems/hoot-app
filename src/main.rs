@@ -5,6 +5,7 @@ use egui::FontFamily::Proportional;
 use egui_extras::{Column, TableBuilder};
 use std::collections::HashMap;
 use tracing::{debug, error, info, Level};
+use tokio::runtime;
 
 mod account_manager;
 mod error;
@@ -74,6 +75,7 @@ pub struct HootState {
 }
 
 pub struct Hoot {
+    rt: runtime::Runtime,
     pub page: Page,
     focused_post: String,
     status: HootStatus,
@@ -303,6 +305,10 @@ impl Hoot {
         let ndb = nostrdb::Ndb::new(storage_dir.to_str().unwrap(), &ndb_config)
             .expect("could not load nostrdb");
         Self {
+            rt: runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .unwrap(),
             page: Page::Inbox,
             focused_post: "".into(),
             status: HootStatus::Initalizing,
