@@ -2,6 +2,9 @@
 pub enum Error {
     RelayNotConnected,
     SerdeJson(serde_json::Error),
+    Generic(String),
+    Empty,
+    DecodeFailed,
 }
 
 impl From<serde_json::Error> for Error {
@@ -15,6 +18,9 @@ impl std::fmt::Display for Error {
         match self {
             Error::RelayNotConnected => write!(f, "Relay not connected"),
             Error::SerdeJson(err) => write!(f, "JSON serialization error: {}", err),
+            Error::Generic(s) => write!(f, "{}", s),
+            Error::Empty => write!(f, "Data was empty"),
+            Error::DecodeFailed => write!(f, "Could not decode JSON data."),
         }
     }
 }

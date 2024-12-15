@@ -1,5 +1,7 @@
-use crate::keystorage::{Result, KeyStorage, KeyStorageType};
-use nostr::Keys;
+use crate::keystorage::{Error, Result, KeyStorage, KeyStorageType};
+use nostr::{Keys, Event};
+use nostr::nips::nip59::UnwrappedGift;
+use pollster::FutureExt as _;
 
 pub struct AccountManager {
     pub loaded_keys: Vec<Keys>,
@@ -10,6 +12,21 @@ impl AccountManager {
         Self {
             loaded_keys: Vec::new(),
         }
+    }
+
+    pub fn unwrap_gift_wrap(&mut self, gift_wrap: &Event) -> Result<UnwrappedGift> {
+        let target_pubkey = gift_wrap.tags.iter()
+            .find(|tag| tag.kind() == "p".into())
+            .and_then(|tag| tag.content())
+            .ok_or(Error::KeyNotFound)?;
+
+        let target_key = self.loaded_keys.iter()
+            .find(|key| key.public_key().to_string() == *target_pubkey)
+            .ok_or(Error::KeyNotFound)?;
+
+        UnwrappedGift::from_gift_wrap(target_key, gift_wrap)
+            .block_on()
+            .map_err(|e| Error::UnwrappingFailed(e.to_string()))
     }
 
     pub fn generate_keys(&mut self) -> Result<Keys> {
@@ -53,7 +70,6 @@ impl AccountManager {
         KeyStorageType::None
     }
 }
-
 impl KeyStorage for AccountManager {
     fn get_keys(&self) -> Result<Vec<Keys>> {
         Self::get_platform_keystorage().get_keys()

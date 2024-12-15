@@ -21,7 +21,7 @@ impl MacOSKeyStorage {
         match set_generic_password(
             self.service_name,
             &key.public_key().to_hex().as_str(),
-            key.secret_key().unwrap().as_secret_bytes(),
+            key.secret_key().as_secret_bytes(),
         ) {
             Ok(_) => Ok(()),
             Err(_) => Err(Error::Addition(key.public_key().to_hex())),

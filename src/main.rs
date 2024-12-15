@@ -128,22 +128,30 @@ fn update_app(app: &mut Hoot, ctx: &egui::Context) {
     if new_val.is_some() {
         info!("{:?}", new_val.clone());
 
-        use relay::RelayMessage;
-        let deserialized: RelayMessage =
-            serde_json::from_str(new_val.unwrap().as_str()).expect("relay sent us bad json");
+        match relay::RelayMessage::from_json(&new_val.unwrap()) {
+            Ok(v) => process_message(app, &v),
+            Err(e) => error!("could not decode message sent from relay: {}", e),
+        };
+    }
+}
 
-        use RelayMessage::*;
-        match deserialized {
-            Event {
-                subscription_id,
-                event,
-            } => {
-                app.events.push(event);
-            }
-            _ => {
-                // who cares rn
-            }
-        }
+fn process_message(app: &mut Hoot, msg: &relay::RelayMessage) {
+    use relay::RelayMessage::*;
+    match msg {
+        Event(sub_id, event) => process_event(app, &sub_id, &event),
+        _ => {
+            // we don't care rn.
+        },
+    }
+
+}
+
+fn process_event(app: &mut Hoot, _sub_id: &str, event: &str) {
+    #[cfg(feature = "profiling")]
+    puffin::profile_function!();
+
+    if let Err(err) = app.ndb.process_event(event) {
+        error!("error processing event: {}", err);
     }
 }
 
@@ -203,8 +211,8 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                 if ui.button("Send Test Event").clicked() {
                     let temp_keys = nostr::Keys::generate();
                     // todo: lmao
-                    let new_event = nostr::EventBuilder::text_note("GFY!", [])
-                        .to_event(&temp_keys)
+                    let new_event = nostr::EventBuilder::text_note("GFY!")
+                        .sign_with_keys(&temp_keys)
                         .unwrap();
                     let event_json = crate::relay::ClientMessage::Event { event: new_event };
                     let _ = &app
@@ -246,7 +254,7 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                         let row_height = 30.0;
                         let events = app.events.clone();
                         body.rows(row_height, events.len(), |mut row| {
-                            let row_index = row.index();
+                            let event = &events[row.index()];
                             row.col(|ui| {
                                 ui.checkbox(&mut false, "");
                             });
@@ -254,18 +262,18 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                                 ui.checkbox(&mut false, "");
                             });
                             row.col(|ui| {
-                                ui.label(events[row_index].pubkey.to_string());
+                                ui.label(event.pubkey.to_string());
                             });
                             row.col(|ui| {
-                                ui.label(events[row_index].content.clone());
+                                ui.label(event.content.clone());
                             });
                             row.col(|ui| {
                                 ui.label("2 minutes ago");
                             });
 
                             if row.response().clicked() {
-                                println!("clicked: {}", events[row_index].content.clone());
-                                app.focused_post = events[row_index].id().to_string();
+                                println!("clicked: {}", event.content.clone());
+                                app.focused_post = event.id.to_string();
                                 app.page = Page::Post;
                             }
                         });
@@ -279,16 +287,30 @@ fn render_app(app: &mut Hoot, ctx: &egui::Context) {
                     "focused_post should not be empty when Page::Post"
                 );
 
-                let event_to_display = app
+                let gift_wrapped_event = app
                     .events
                     .iter()
-                    .find(|&x| x.id().to_string() == app.focused_post)
+                    .find(|&x| x.id.to_string() == app.focused_post)
                     .expect("event id should be present inside event list");
 
+                let event_to_display = app.account_manager.unwrap_gift_wrap(gift_wrapped_event).expect("we should be able to unwrap an event we recieved");
+
                 ui.heading("View Message");
-                ui.label(format!("Content: {}", event_to_display.content));
-                ui.label(format!("ID: {}", event_to_display.id().to_string()));
-                ui.label(format!("Author: {}", event_to_display.pubkey.to_string()));
+                ui.label(format!("Content: {}", event_to_display.rumor.content));
+                ui.label(match &event_to_display.rumor.tags.find(nostr::TagKind::Subject) {
+                    Some(s) => match s.content() {
+                        Some(c) => format!("Subject: {}", c.to_string()),
+                        None => "Subject: None".to_string(),
+                    },
+                    None => "Subject: None".to_string(),
+                });
+
+                ui.label(match &event_to_display.rumor.id {
+                    Some(id) => format!("ID: {}", id.to_string()),
+                    None => "ID: None".to_string(),
+                });
+
+                ui.label(format!("Author: {}", event_to_display.sender.to_string()));
             }
         });
     }

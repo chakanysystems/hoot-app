@@ -18,6 +18,8 @@ pub enum Error {
     IOError(std::io::Error),
     Addition(String),
     Removal(String),
+    KeyNotFound,
+    UnwrappingFailed(String),
 }
 
 pub type Result<T> = core::result::Result<T, Error>;
@@ -34,6 +36,8 @@ impl std::fmt::Debug for Error {
             Error::IOError(err) => write!(f, "IOError: {:?}", err),
             Error::Addition(key) => write!(f, "Could not add key {}", key),
             Error::Removal(key) => write!(f, "Could not remove key {}", key),
+            Error::KeyNotFound => write!(f, "Could not find key in keystore"),
+            Error::UnwrappingFailed(err) => write!(f, "Couldn't unwrap gift wrapped event: {}", err)
         }
     }
 }
@@ -44,6 +48,8 @@ impl std::fmt::Display for Error {
             Error::IOError(err) => write!(f, "IO error: {}", err),
             Error::Addition(key) => write!(f, "Could not add key {}", key),
             Error::Removal(key) => write!(f, "Could not remove key {}", key),
+            Error::KeyNotFound => write!(f, "Could not find key in keystore"),
+            Error::UnwrappingFailed(err) => write!(f, "Couldn't unwrap gift wrapped event: {}", err)
         }
     }
 }

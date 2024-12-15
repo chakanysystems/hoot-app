@@ -1,138 +1,145 @@
-use ewebsock::WsMessage;
+use ewebsock::{WsMessage, WsEvent};
 use nostr::types::Filter;
 use nostr::Event;
 use serde::de::{SeqAccess, Visitor};
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{self};
+use crate::error;
 
-/// Messages that are client <- relay.
-#[derive(Debug, Clone)]
-pub enum RelayMessage {
-    Event {
-        subscription_id: String,
-        event: Event,
-    },
-    Ok {
-        event_id: String,
-        accepted: bool,
-        message: String,
-    },
-    Eose {
-        subscription_id: String,
-    },
-    Closed {
-        subscription_id: String,
-        message: String,
-    },
-    Notice {
-        message: String,
-    },
+#[derive(Debug, Eq, PartialEq)]
+pub struct CommandResult<'a> {
+    event_id: &'a str,
+    status: bool,
+    message: &'a str,
 }
 
-impl From<WsMessage> for RelayMessage {
-    fn from(value: WsMessage) -> Self {
+#[derive(Debug, Eq, PartialEq)]
+pub enum RelayMessage<'a> {
+    Event(&'a str, &'a str),
+    OK(CommandResult<'a>),
+    Eose(&'a str),
+    Closed(&'a str, &'a str),
+    Notice(&'a str),
+}
+
+#[derive(Debug)]
+pub enum RelayEvent<'a> {
+    Opened,
+    Closed,
+    Other(&'a WsMessage),
+    Error(error::Error),
+    Message(RelayMessage<'a>)
+}
+
+impl<'a> From<&'a WsEvent> for RelayEvent<'a> {
+    fn from(value: &'a WsEvent) -> Self {
         match value {
-            WsMessage::Text(text) => {
-                let parsed: RelayMessage = match serde_json::from_str(&text) {
-                    Ok(p) => p,
-                    Err(e) => {
-                        panic!("could not parse message: {}", e);
-                    }
-                };
-                parsed
-            }
-            _ => {
-                panic!("Cannot parse anything but text into a RelayMessage");
-            }
+            WsEvent::Opened => RelayEvent::Opened,
+            WsEvent::Closed => RelayEvent::Closed,
+            WsEvent::Message(ref ws_msg) => ws_msg.into(),
+            WsEvent::Error(e) => RelayEvent::Error(error::Error::Generic(e.to_owned())),
         }
     }
 }
 
-impl<'de> Deserialize<'de> for RelayMessage {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct RelayMessageVisitor;
+impl<'a> From<&'a WsMessage> for RelayEvent<'a> {
+    fn from(value: &'a WsMessage) -> Self {
+        match value {
+            WsMessage::Text(s) => match RelayMessage::from_json(s).map(RelayEvent::Message) {
+                Ok(msg) => msg,
+                Err(err) => RelayEvent::Error(err),
+            },
+            value => RelayEvent::Other(value),
+        }
+    }
+}
 
-        impl<'de> Visitor<'de> for RelayMessageVisitor {
-            type Value = RelayMessage;
+impl<'a> RelayMessage<'a> {
+    pub fn eose(subid: &'a str) -> Self {
+        RelayMessage::Eose(subid)
+    }
 
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a sequence starting with 'EVENT' or 'OK'")
+    pub fn notice(msg: &'a str) -> Self {
+        RelayMessage::Notice(msg)
+    }
+
+    pub fn ok(event_id: &'a str, status: bool, message: &'a str) -> Self {
+        RelayMessage::OK(CommandResult {
+            event_id,
+            status,
+            message,
+        })
+    }
+
+    pub fn event(ev: &'a str, sub_id: &'a str) -> Self {
+        RelayMessage::Event(sub_id, ev)
+    }
+
+    pub fn from_json(msg: &'a str) -> error::Result<RelayMessage<'a>> {
+        if msg.is_empty() {
+            return Err(error::Error::Empty);
+        }
+
+        // Notice
+        // Relay response format: ["NOTICE", <message>]
+        if msg.len() >= 12 && &msg[0..=9] == "[\"NOTICE\"," {
+            // TODO: there could be more than one space, whatever
+            let start = if msg.as_bytes().get(10).copied() == Some(b' ') {
+                12
+            } else {
+                11
+            };
+            let end = msg.len() - 2;
+            return Ok(Self::notice(&msg[start..end]));
+        }
+
+        // Event
+        // Relay response format: ["EVENT", <subscription id>, <event JSON>]
+        if &msg[0..=7] == "[\"EVENT\"" {
+            let mut start = 9;
+            while let Some(&b' ') = msg.as_bytes().get(start) {
+                start += 1; // Move past optional spaces
             }
-
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: SeqAccess<'de>,
-            {
-                let tag: &str = seq
-                    .next_element()?
-                    .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
-
-                match tag {
-                    "EVENT" => {
-                        let subscription_id: String = seq
-                            .next_element()?
-                            .ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
-                        let event: Event = seq
-                            .next_element()?
-                            .ok_or_else(|| serde::de::Error::invalid_length(2, &self))?;
-                        Ok(RelayMessage::Event {
-                            subscription_id,
-                            event,
-                        })
-                    }
-                    "OK" => {
-                        let event_id: String = seq
-                            .next_element()?
-                            .ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
-                        let accepted: bool = seq
-                            .next_element()?
-                            .ok_or_else(|| serde::de::Error::invalid_length(2, &self))?;
-                        let message: String = seq
-                            .next_element()?
-                            .ok_or_else(|| serde::de::Error::invalid_length(3, &self))?;
-                        Ok(RelayMessage::Ok {
-                            event_id,
-                            accepted,
-                            message,
-                        })
-                    }
-                    "EOSE" => {
-                        let subscription_id: String = seq
-                            .next_element()?
-                            .ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
-                        Ok(RelayMessage::Eose { subscription_id })
-                    }
-                    "CLOSED" => {
-                        let subscription_id: String = seq
-                            .next_element()?
-                            .ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
-                        let message: String = seq
-                            .next_element()?
-                            .ok_or_else(|| serde::de::Error::invalid_length(2, &self))?;
-                        Ok(RelayMessage::Closed {
-                            subscription_id,
-                            message,
-                        })
-                    }
-                    "NOTICE" => {
-                        let message: String = seq
-                            .next_element()?
-                            .ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
-                        Ok(RelayMessage::Notice { message })
-                    }
-                    _ => Err(serde::de::Error::invalid_value(
-                        serde::de::Unexpected::Str(tag),
-                        &self,
-                    )),
-                }
+            if let Some(comma_index) = msg[start..].find(',') {
+                let subid_end = start + comma_index;
+                let subid = &msg[start..subid_end].trim().trim_matches('"');
+                return Ok(Self::event(msg, subid));
+            } else {
+                return Ok(Self::event(msg, "fixme"));
             }
         }
 
-        deserializer.deserialize_seq(RelayMessageVisitor)
+        // EOSE (NIP-15)
+        // Relay response format: ["EOSE", <subscription_id>]
+        if &msg[0..=7] == "[\"EOSE\"," {
+            let start = if msg.as_bytes().get(8).copied() == Some(b' ') {
+                10
+            } else {
+                9
+            };
+            let end = msg.len() - 2;
+            return Ok(Self::eose(&msg[start..end]));
+        }
+
+        // OK (NIP-20)
+        // Relay response format: ["OK",<event_id>, <true|false>, <message>]
+        if &msg[0..=5] == "[\"OK\"," && msg.len() >= 78 {
+            // TODO: fix this
+            let event_id = &msg[7..71];
+            let booly = &msg[73..77];
+            let status: bool = if booly == "true" {
+                true
+            } else if booly == "false" {
+                false
+            } else {
+                return Err(error::Error::DecodeFailed);
+            };
+
+            return Ok(Self::ok(event_id, status, "fixme"));
+        }
+
+        Err(error::Error::DecodeFailed)
     }
 }
 
