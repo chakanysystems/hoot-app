@@ -1,5 +1,10 @@
+use bitcoin::secp256k1::{Message, PublicKey, SecretKey, Keypair, schnorr::Signature, Secp256k1, hashes::{Hash, sha256}};
+use serde_json::json;
+
 mod tag;
 use tag::{Tag, list::Tags};
+mod id;
+use id::EventId;
 
 #[derive(Debug, Default)]
 pub struct EventBuilder<'a> {
@@ -43,21 +48,16 @@ impl EventBuilder<'_> {
         self
     }
 }
-use bitcoin::{
-    hex,
-    secp256k1::{Message, SecretKey, Secp256k1, hashes::{Hash, sha256}}
-};
-use serde_json::json;
 
 #[derive(Debug, Clone)]
 pub struct Event {
-    pub id: String,
-    pub pubkey: String,
+    pub id: EventId,
+    pub pubkey: PublicKey,
     pub created_at: i64,
     pub kind: i32,
     pub tags: Vec<Vec<String>>,
     pub content: String,
-    pub sig: String,
+    pub sig: Signature,
 }
 
 impl Event {
@@ -65,51 +65,31 @@ impl Event {
     pub fn verify(&self) -> bool {
         let secp = Secp256k1::verification_only();
 
-        // Get the event id as message
-        let message = match Message::from_digest(self.id.as_bytes()) {
-            Ok(msg) => msg,
-            Err(_) => return false,
-        };
+        let message = Message::from_digest(*self.id.as_bytes());
+        
+        secp.verify_schnorr(&self.sig, &message, &self.pubkey.into()).is_ok()
+    }
 
-        // Parse the public key
-        let pubkey = match PublicKey::from_slice(&hex::decode(&self.pubkey).unwrap()) {
-            Ok(key) => key,
-            Err(_) => return false,
-        };
+    pub fn sign_with_seckey(&mut self, seckey: &SecretKey) -> Result<(), String> {
+        let secp = Secp256k1::new();
 
-        // Parse the signature
-        let sig = match Signature::from_slice(&hex::decode(&self.sig).unwrap()) {
-            Ok(s) => s,
-            Err(_) => return false,
-        };
+        let keypair = Keypair::from_secret_key(&secp, seckey);
 
-        // Verify the signature
-        secp.verify(&message, &sig, &pubkey).is_ok()
+        self.sign(&keypair)
     }
 
     /// Signs the event with the given private key
-    pub fn sign(&mut self, seckey: &[u8]) -> Result<(), String> {
+    pub fn sign(&mut self, keypair: &Keypair) -> Result<(), String> {
         let secp = Secp256k1::new();
 
-        self.compute_id();
-
-        // Create the message from the id
-        let message = match Message::from_digest(&hex::decode(&self.id).unwrap())
-
-        // Parse the secret key
-        let secret_key = SecretKey::from_slice(seckey).map_err(|e| e.to_string())?;
-
-        // Sign the message
-        let sig = secp.sign_ecdsa(&message, &secret_key);
-
-        // Convert signature to hex string
-        self.sig = hex::encode(sig.serialize_compact());
-
+        self.id = self.compute_id();
+        let message = Message::from_digest(*self.id.as_bytes());
+        self.sig = secp.sign_schnorr(&message, keypair);
         Ok(())
     }
 
     /// Computes the event ID
-    fn compute_id(mut self) {
+    fn compute_id(&self) -> EventId {
         let serialized = json!([
             0,
             self.pubkey,
@@ -119,8 +99,58 @@ impl Event {
             self.content
         ]);
 
-        // lol
-        self.id = sha256::Hash::hash(serialized.as_str().unwrap().as_bytes()).to_string();
+        sha256::Hash::hash(serialized.as_str().unwrap().as_bytes()).to_string().into()
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bitcoin::secp256k1::{Secp256k1, SecretKey, PublicKey};
+
+    fn create_test_event() -> Event {
+        Event {
+            id: EventId::default(),
+            pubkey: PublicKey::from_slice(&[0; 33]).unwrap(),
+            created_at: 1234567890,
+            kind: 1,
+            tags: vec![vec!["tag1".to_string(), "value1".to_string()]],
+            content: "Test content".to_string(),
+            sig: Signature::from_slice(&[0; 64]).unwrap(),
+        }
+    }
+
+    #[test]
+    fn test_compute_id() {
+        let event = create_test_event();
+        let id = event.compute_id();
+        assert_ne!(id, EventId::default());
+    }
+
+    #[test]
+    fn test_sign_and_verify() {
+        let secp = Secp256k1::new();
+        let secret_key = SecretKey::new(&mut rand::thread_rng());
+        let keypair = Keypair::from_secret_key(&secp, &secret_key);
+
+        let mut event = create_test_event();
+        assert!(event.sign(&keypair).is_ok());
+        assert!(event.verify());
+    }
+
+    #[test]
+    fn test_sign_with_seckey() {
+        let secret_key = SecretKey::new(&mut rand::thread_rng());
+        let mut event = create_test_event();
+        assert!(event.sign_with_seckey(&secret_key).is_ok());
+        assert!(event.verify());
+    }
+
+    #[test]
+    fn test_verify_invalid_signature() {
+        let mut event = create_test_event();
+        event.content = "Modified content".to_string();
+        assert!(!event.verify());
+    }
+}

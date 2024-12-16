@@ -28,7 +28,7 @@ rand = "0.8.5"
 serde = "1.0.204"
 serde_json = "1.0.121"
 pollster = "0.4.0"
-bitcoin = "0.32.5"
+bitcoin = { version = "0.32.5", features = ["serde", "rand-std"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "3.0.0"
